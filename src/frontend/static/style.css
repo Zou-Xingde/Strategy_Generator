@@ -14,32 +14,7 @@ html, body {
     font-size: 12px;
 }
 
-/* 頂部菜單欄 */
-.menu-bar {
-    height: 20px;
-    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-    border-bottom: 1px solid #1a1a1a;
-    display: flex;
-    align-items: center;
-    padding: 0 8px;
-}
-
-.menu-items {
-    display: flex;
-    gap: 16px;
-}
-
-.menu-item {
-    color: #ffffff;
-    font-size: 11px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 2px;
-}
-
-.menu-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
+/* 移除頂部菜單欄樣式 */
 
 /* 主工具欄 */
 .main-toolbar {
@@ -118,83 +93,31 @@ html, body {
     color: #ffffff;
 }
 
+/* Market Swing 主題 */
+.market-swing-theme {
+    --primary-bg: #000000;
+    --secondary-bg: #1a1a1a;
+    --accent-bg: #2a2a2a;
+    --border-color: #333333;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --green-color: #00cc00;
+    --red-color: #ff4444;
+    --blue-color: #0078d4;
+}
+
 /* 主要內容區域 */
 .main-content {
     display: flex;
-    height: calc(100vh - 75px); /* 減去菜單欄、工具欄和狀態欄高度 */
+    height: calc(100vh - 55px); /* 減去工具欄和狀態欄高度 */
 }
 
-/* 左側面板 */
-.left-panel {
-    width: 200px;
-    background: #363636;
-    border-right: 1px solid #1a1a1a;
-    display: flex;
-    flex-direction: column;
-}
+/* 移除左側面板樣式 */
 
-.panel-header {
-    height: 25px;
-    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-    border-bottom: 1px solid #1a1a1a;
-    display: flex;
-    align-items: center;
-    padding: 0 8px;
-    font-size: 11px;
-    font-weight: bold;
-    color: #ffffff;
-}
-
-.symbol-list {
-    flex: 1;
-    overflow-y: auto;
-}
-
-.symbol-item {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 4px;
-    padding: 4px 8px;
-    border-bottom: 1px solid #2a2a2a;
-    cursor: pointer;
-    font-size: 10px;
-}
-
-.symbol-item:hover {
-    background: #404040;
-}
-
-.symbol-item.active {
-    background: #0078d4;
-}
-
-.symbol-name {
-    font-weight: bold;
-    color: #ffffff;
-}
-
-.symbol-price {
-    color: #ffffff;
-    text-align: right;
-    font-family: 'Courier New', monospace;
-}
-
-.symbol-change {
-    text-align: right;
-    font-family: 'Courier New', monospace;
-}
-
-.symbol-change.positive {
-    color: #00ff00;
-}
-
-.symbol-change.negative {
-    color: #ff4444;
-}
-
-/* 中央圖表區域 */
+/* 圖表區域 */
 .chart-area {
     flex: 1;
+    width: 100%;
     display: flex;
     flex-direction: column;
     background: #2b2b2b;
@@ -216,27 +139,15 @@ html, body {
     color: #ffffff;
 }
 
-.chart-controls {
+.chart-info {
     display: flex;
-    gap: 2px;
-}
-
-.chart-btn {
-    width: 20px;
-    height: 20px;
-    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
-    border: 1px solid #3a3a3a;
-    border-radius: 2px;
-    color: #ffffff;
-    cursor: pointer;
+    gap: 8px;
     font-size: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    color: #cccccc;
 }
 
-.chart-btn:hover {
-    background: linear-gradient(to bottom, #6a6a6a, #5a5a5a);
+.chart-info .separator {
+    color: #666666;
 }
 
 /* 主圖表容器 */
@@ -244,6 +155,8 @@ html, body {
     flex: 1;
     background: #000000;
     position: relative;
+    min-height: 400px;
+    height: calc(100vh - 80px); /* 減去工具欄和狀態欄的高度 */
 }
 
 #main-chart {
@@ -251,189 +164,40 @@ html, body {
     height: 100%;
 }
 
-/* 指標圖表容器 */
-.indicator-container {
-    height: 120px;
-    background: #000000;
-    border-top: 1px solid #1a1a1a;
-    display: flex;
-    flex-direction: column;
-}
+/* 移除指標圖表容器樣式 */
 
-.indicator-header {
-    height: 20px;
-    background: #2a2a2a;
-    display: flex;
-    align-items: center;
-    padding: 0 8px;
-    font-size: 10px;
-    color: #cccccc;
-}
-
-#indicator-chart {
-    flex: 1;
-}
-
-/* 右側面板 */
-.right-panel {
-    width: 250px;
-    background: #363636;
-    border-left: 1px solid #1a1a1a;
-    display: flex;
-    flex-direction: column;
-}
-
-.panel-tabs {
-    height: 25px;
-    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-    border-bottom: 1px solid #1a1a1a;
-    display: flex;
-}
-
-.tab {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    cursor: pointer;
-    border-right: 1px solid #1a1a1a;
-    color: #cccccc;
-}
-
-.tab:last-child {
-    border-right: none;
-}
-
-.tab:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.tab.active {
-    background: #0078d4;
-    color: #ffffff;
-}
-
-/* 交易面板 */
-.trading-panel {
-    flex: 1;
-    padding: 8px;
-    overflow-y: auto;
-}
-
-.symbol-info {
-    margin-bottom: 16px;
-}
-
-.symbol-header {
-    font-size: 14px;
-    font-weight: bold;
-    color: #ffffff;
-    margin-bottom: 8px;
-}
-
-.price-display {
-    background: #2a2a2a;
-    border-radius: 4px;
-    padding: 8px;
-}
-
-.bid-ask {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 4px;
-}
-
-.bid, .ask {
-    font-family: 'Courier New', monospace;
-    font-size: 16px;
-    font-weight: bold;
-}
-
-.bid {
-    color: #ff4444;
-}
-
-.ask {
-    color: #00ff00;
-}
-
-.spread {
-    font-size: 10px;
-    color: #cccccc;
-    text-align: center;
-}
-
-/* 訂單面板 */
-.order-panel {
-    background: #2a2a2a;
-    border-radius: 4px;
-    padding: 8px;
-}
-
-.order-type {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 12px;
-}
-
-.order-btn {
-    flex: 1;
-    height: 32px;
-    border: none;
-    border-radius: 2px;
-    font-size: 12px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.order-btn.buy {
-    background: #00aa00;
-    color: #ffffff;
-}
-
-.order-btn.sell {
-    background: #aa0000;
-    color: #ffffff;
-}
-
-.order-btn:hover {
-    opacity: 0.8;
-}
-
-.order-details {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.input-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.input-row label {
-    width: 50px;
-    font-size: 10px;
-    color: #cccccc;
-}
-
-.input-row input {
-    flex: 1;
-    height: 22px;
+/* 工具按鈕功能增強 */
+.tool-btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
     background: #1a1a1a;
-    border: 1px solid #4a4a4a;
-    border-radius: 2px;
     color: #ffffff;
-    padding: 0 6px;
-    font-size: 10px;
+    padding: 2px 6px;
+    font-size: 9px;
+    border-radius: 2px;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
 }
 
-.input-row input:focus {
-    outline: none;
-    border-color: #0078d4;
+.tool-btn {
+    position: relative;
 }
+
+.tool-btn.active {
+    background: linear-gradient(to bottom, #0078d4, #106ebe);
+    color: #ffffff;
+}
+
+.tool-btn:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 移除右側面板樣式 */
 
 /* 底部狀態欄 */
 .status-bar {

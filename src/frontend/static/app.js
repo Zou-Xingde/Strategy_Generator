@@ -2,32 +2,34 @@
     class CandlestickChart {
         constructor() {
             this.mainChart = null;
-            this.indicatorChart = null;
             this.candlestickSeries = null;
-            this.volumeSeries = null;
-            this.rsiSeries = null;
-            this.rsiUpperLine = null;
-            this.rsiLowerLine = null;
             this.currentTimeframe = 'D1';
             this.symbol = 'EXUSA30IDXUSD';
             this.measurementMode = false;
             this.measurementPoints = [];
+            this.measurementLines = []; // 儲存測量線
             this.config = {};
+            this.dataCount = 0; // 記錄數據總數
             
-            console.log('CandlestickChart constructor called');
+            console.log('Market Swing CandlestickChart constructor called');
             this.init();
         }
         
         async init() {
-            console.log('Initializing CandlestickChart...');
+            console.log('Initializing Market Swing Chart...');
             try {
                 await this.loadConfig();
-                this.initChart();
-                this.setupEventListeners();
-                await this.loadChart();
-                console.log('CandlestickChart initialization completed');
+                
+                // 等待DOM完全載入
+                setTimeout(() => {
+                    this.initChart();
+                    this.setupEventListeners();
+                    this.loadChart();
+                }, 200);
+                
+                console.log('Market Swing Chart initialization started');
             } catch (error) {
-                console.error('Failed to initialize CandlestickChart:', error);
+                console.error('Failed to initialize Market Swing Chart:', error);
             }
         }
         
@@ -44,21 +46,15 @@
         }
         
         initChart() {
-            console.log('Initializing charts...');
+            console.log('Initializing Market Swing chart...');
             const mainChartContainer = document.querySelector("#main-chart");
-            const indicatorChartContainer = document.querySelector("#indicator-chart");
             
             if (!mainChartContainer) {
                 console.error('Main chart container not found!');
                 return;
             }
             
-            if (!indicatorChartContainer) {
-                console.error('Indicator chart container not found!');
-                return;
-            }
-            
-            console.log('Chart containers found, creating charts...');
+            console.log('Chart container found, creating chart...');
             
             // 清除舊圖表
             if (this.mainChart) {
@@ -68,91 +64,82 @@
                     console.warn('Error removing main chart:', e);
                 }
             }
-            if (this.indicatorChart) {
-                try {
-                    this.indicatorChart.remove();
-                } catch (e) {
-                    console.warn('Error removing indicator chart:', e);
-                }
-            }
             
             // 檢查容器尺寸
             const mainWidth = mainChartContainer.offsetWidth || 800;
             const mainHeight = mainChartContainer.offsetHeight || 400;
-            const indicatorWidth = indicatorChartContainer.offsetWidth || 800;
-            const indicatorHeight = indicatorChartContainer.offsetHeight || 100;
             
             console.log('Main chart size:', mainWidth, 'x', mainHeight);
-            console.log('Indicator chart size:', indicatorWidth, 'x', indicatorHeight);
             
             try {
-                // 創建主圖表 - MT5風格配置
-                this.mainChart = LightweightCharts.createChart(mainChartContainer, {
-                    width: mainWidth,
-                    height: mainHeight,
+                // 強制設置容器尺寸
+                if (mainWidth <= 0 || mainHeight <= 0) {
+                    mainChartContainer.style.width = '100%';
+                    mainChartContainer.style.height = 'calc(100vh - 80px)';
+                    
+                    // 重新獲取尺寸
+                    setTimeout(() => {
+                        const newWidth = mainChartContainer.offsetWidth || 1200;
+                        const newHeight = mainChartContainer.offsetHeight || 600;
+                        console.log('重新計算尺寸:', newWidth, 'x', newHeight);
+                        
+                        this.createChart(mainChartContainer, newWidth, newHeight);
+                    }, 100);
+                    return;
+                }
+                
+                this.createChart(mainChartContainer, mainWidth, mainHeight);
+                
+            } catch (error) {
+                console.error('Error creating charts:', error);
+            }
+        }
+        
+        createChart(container, width, height) {
+            try {
+                // 創建主圖表 - Market Swing 乾淨風格配置
+                this.mainChart = LightweightCharts.createChart(container, {
+                    width: width,
+                    height: height,
                     layout: {
                         backgroundColor: '#000000',
                         textColor: '#ffffff',
                     },
                     grid: {
                         vertLines: {
-                            color: '#1a1a1a',
+                            visible: false,
                         },
                         horzLines: {
-                            color: '#1a1a1a',
+                            visible: false,
                         },
                     },
                     crosshair: {
-                        mode: LightweightCharts.CrosshairMode.Normal,
+                        mode: LightweightCharts.CrosshairMode.Hidden,
                     },
                     rightPriceScale: {
-                        borderColor: '#333333',
+                        borderVisible: false,
                         textColor: '#cccccc',
                     },
                     timeScale: {
-                        borderColor: '#333333',
+                        borderVisible: false,
                         textColor: '#cccccc',
                         timeVisible: true,
                         secondsVisible: false,
+                    },
+                    handleScroll: {
+                        mouseWheel: true,
+                        pressedMouseMove: true,
+                    },
+                    handleScale: {
+                        axisPressedMouseMove: true,
+                        mouseWheel: true,
+                        pinch: true,
                     },
                 });
                 
                 console.log('Main chart created successfully');
                 
-                // 創建指標圖表 - RSI
-                this.indicatorChart = LightweightCharts.createChart(indicatorChartContainer, {
-                    width: indicatorWidth,
-                    height: indicatorHeight,
-                    layout: {
-                        backgroundColor: '#000000',
-                        textColor: '#ffffff',
-                    },
-                    grid: {
-                        vertLines: {
-                            color: '#1a1a1a',
-                        },
-                        horzLines: {
-                            color: '#1a1a1a',
-                        },
-                    },
-                    crosshair: {
-                        mode: LightweightCharts.CrosshairMode.Normal,
-                    },
-                    rightPriceScale: {
-                        borderColor: '#333333',
-                        textColor: '#cccccc',
-                    },
-                    timeScale: {
-                        borderColor: '#333333',
-                        textColor: '#cccccc',
-                        timeVisible: true,
-                        secondsVisible: false,
-                    },
-                });
-                
-                console.log('Indicator chart created successfully');
-                
-                // 主圖表：添加蠟燭圖系列
+                // 添加蠟燭圖系列 - Market Swing 風格
                 this.candlestickSeries = this.mainChart.addCandlestickSeries({
                     upColor: '#00cc00',
                     downColor: '#ff4444',
@@ -161,81 +148,38 @@
                     wickDownColor: '#ff4444',
                 });
                 
-                console.log('Candlestick series added');
-                
-                // 主圖表：添加成交量系列
-                this.volumeSeries = this.mainChart.addHistogramSeries({
-                    color: '#0099ff',
-                    priceFormat: {
-                        type: 'volume',
-                        minMove: 0.01,
-                        precision: 2,
-                    },
-                    priceScaleId: 'left',
-                    scaleMargins: {
-                        top: 0.85,  // 蠟燭圖佔據頂部85%空間
-                        bottom: 0,  // 成交量佔據底部15%空間
-                    },
-                });
-                
-                console.log('Volume series added');
-                
-                // 配置主圖表左側價格軸（成交量）
-                this.mainChart.priceScale('left').applyOptions({
-                    borderColor: '#333333',
-                    textColor: '#cccccc',
-                    scaleMargins: {
-                        top: 0.85,
-                        bottom: 0,
-                    },
-                });
-                
-                // 指標圖表：添加RSI線圖系列
-                this.rsiSeries = this.indicatorChart.addLineSeries({
-                    color: '#ffaa00',
-                    lineWidth: 1,
-                    priceFormat: {
-                        type: 'price',
-                        precision: 2,
-                        minMove: 0.01,
-                    },
-                });
-                
-                console.log('RSI series added');
-                
-                // 添加RSI超買超賣線
-                this.rsiUpperLine = this.indicatorChart.addLineSeries({
-                    color: '#ff4444',
-                    lineWidth: 1,
-                    lineStyle: 2, // 虛線
-                    priceFormat: {
-                        type: 'price',
-                        precision: 2,
-                        minMove: 0.01,
-                    },
-                });
-                
-                this.rsiLowerLine = this.indicatorChart.addLineSeries({
-                    color: '#ff4444',
-                    lineWidth: 1,
-                    lineStyle: 2, // 虛線
-                    priceFormat: {
-                        type: 'price',
-                        precision: 2,
-                        minMove: 0.01,
-                    },
-                });
-                
-                console.log('RSI lines added');
+                console.log('Candlestick series added - Market Swing style');
                 
                 // 響應式處理
                 this.handleResize();
                 window.addEventListener('resize', () => this.handleResize());
                 
+                // 添加圖表點擊事件處理
+                this.mainChart.subscribeClick((param) => {
+                    console.log('圖表被點擊！param:', param);
+                    console.log('測量模式狀態:', this.measurementMode);
+                    console.log('param.time存在:', !!param.time);
+                    
+                    if (this.measurementMode) {
+                        console.log('測量模式已啟動，處理測量點擊');
+                        this.handleMeasurementClick(param);
+                    } else {
+                        console.log('測量模式未啟動，忽略點擊');
+                    }
+                });
+                
+                // 添加滑鼠中鍵事件支持
+                container.addEventListener('mousedown', (event) => {
+                    if (event.button === 1) { // 滑鼠中鍵
+                        event.preventDefault();
+                        this.toggleMeasurementMode();
+                    }
+                });
+                
                 console.log('Chart initialization complete');
                 
             } catch (error) {
-                console.error('Error creating charts:', error);
+                console.error('Error in createChart:', error);
             }
         }
         
@@ -246,16 +190,6 @@
                     this.mainChart.applyOptions({
                         width: mainChartContainer.offsetWidth,
                         height: mainChartContainer.offsetHeight,
-                    });
-                }
-            }
-            
-            if (this.indicatorChart) {
-                const indicatorChartContainer = document.querySelector("#indicator-chart");
-                if (indicatorChartContainer) {
-                    this.indicatorChart.applyOptions({
-                        width: indicatorChartContainer.offsetWidth,
-                        height: indicatorChartContainer.offsetHeight,
                     });
                 }
             }
@@ -288,10 +222,10 @@
                 console.log('數據樣本:', data.data.slice(0, 3));
                 
                 // 檢查圖表是否已初始化
-                if (!this.candlestickSeries || !this.volumeSeries || !this.rsiSeries) {
+                if (!this.candlestickSeries) {
                     console.error('圖表系列未正確初始化');
                     this.initChart(); // 嘗試重新初始化
-                    if (!this.candlestickSeries || !this.volumeSeries || !this.rsiSeries) {
+                    if (!this.candlestickSeries) {
                         console.error('重新初始化失敗');
                         return;
                     }
@@ -362,73 +296,27 @@
                 // 確保蠟燭圖數據按時間排序
                 candlestickData.sort((a, b) => a.time - b.time);
                 
-                const volumeData = deduplicatedData
-                    .filter(item => {
-                        return item && 
-                               item.timestamp && 
-                               item.volume !== null && item.volume !== undefined &&
-                               item.close !== null && item.close !== undefined &&
-                               item.open !== null && item.open !== undefined;
-                    })
-                    .map(item => {
-                        const timestamp = new Date(item.timestamp);
-                        const volume = parseFloat(item.volume);
-                        const close = parseFloat(item.close);
-                        const open = parseFloat(item.open);
-                        
-                        if (isNaN(timestamp.getTime()) || isNaN(volume) || isNaN(close) || isNaN(open)) {
-                            return null;
-                        }
-                        
-                        return {
-                            time: Math.floor(timestamp.getTime() / 1000),
-                            value: volume / 1000000, // 將成交量縮放為百萬為單位
-                            color: close >= open ? '#00cc00' : '#ff4444'
-                        };
-                    })
-                    .filter(item => item !== null);
-                
-                // 確保成交量數據按時間排序
-                volumeData.sort((a, b) => a.time - b.time);
-                
                 console.log(`處理後的蠟燭圖數據: ${candlestickData.length} 條`);
-                console.log(`處理後的成交量數據: ${volumeData.length} 條`);
                 
                 if (candlestickData.length === 0) {
                     console.error('沒有有效的蠟燭圖數據');
                     return;
                 }
                 
-                // 計算RSI數據
-                const rsiData = this.calculateRSI(candlestickData, 7);
-                
-                // 創建RSI超買超賣線數據
-                const rsiUpperData = candlestickData.map(item => ({
-                    time: item.time,
-                    value: 70
-                }));
-                
-                const rsiLowerData = candlestickData.map(item => ({
-                    time: item.time,
-                    value: 30
-                }));
-                
                 // 設置數據
                 try {
-                    console.log('設置蠟燭圖數據...');
+                    console.log('設置Market Swing蠟燭圖數據...');
                     this.candlestickSeries.setData(candlestickData);
                     
-                    console.log('設置成交量數據...');
-                    this.volumeSeries.setData(volumeData);
+                    // 記錄數據總數
+                    this.dataCount = candlestickData.length;
+                    console.log('數據總數已記錄:', this.dataCount);
                     
-                    console.log('設置RSI數據...');
-                    this.rsiSeries.setData(rsiData);
-                    this.rsiUpperLine.setData(rsiUpperData);
-                    this.rsiLowerLine.setData(rsiLowerData);
-                    
-                    // 自適應顯示範圍
-                    this.mainChart.timeScale().fitContent();
-                    this.indicatorChart.timeScale().fitContent();
+                    // 自動縮放到適當比例 - 像TradingView和MT5一樣
+                    setTimeout(() => {
+                        this.mainChart.timeScale().fitContent();
+                        console.log('自動縮放完成');
+                    }, 100);
                     
                     // 更新最新數據顯示 - 只有在有有效數據時才更新
                     const validData = data.data.filter(item => 
@@ -451,67 +339,12 @@
             }
         }
         
-        calculateRSI(candlestickData, period = 14) {
-            const rsiData = [];
-            
-            if (candlestickData.length < period + 1) {
-                return rsiData;
-            }
-            
-            const gains = [];
-            const losses = [];
-            
-            // 計算第一個週期的平均收益和損失
-            for (let i = 1; i <= period; i++) {
-                const change = candlestickData[i].close - candlestickData[i - 1].close;
-                if (change > 0) {
-                    gains.push(change);
-                    losses.push(0);
-                } else {
-                    gains.push(0);
-                    losses.push(Math.abs(change));
-                }
-            }
-            
-            let avgGain = gains.reduce((sum, gain) => sum + gain, 0) / period;
-            let avgLoss = losses.reduce((sum, loss) => sum + loss, 0) / period;
-            
-            // 計算第一個RSI值
-            let rs = avgGain / (avgLoss === 0 ? 1 : avgLoss);
-            let rsi = 100 - (100 / (1 + rs));
-            
-            rsiData.push({
-                time: candlestickData[period].time,
-                value: rsi
-            });
-            
-            // 計算後續的RSI值
-            for (let i = period + 1; i < candlestickData.length; i++) {
-                const change = candlestickData[i].close - candlestickData[i - 1].close;
-                const currentGain = change > 0 ? change : 0;
-                const currentLoss = change < 0 ? Math.abs(change) : 0;
-                
-                // 使用Wilder's smoothing方法
-                avgGain = ((avgGain * (period - 1)) + currentGain) / period;
-                avgLoss = ((avgLoss * (period - 1)) + currentLoss) / period;
-                
-                rs = avgGain / (avgLoss === 0 ? 1 : avgLoss);
-                rsi = 100 - (100 / (1 + rs));
-                
-                rsiData.push({
-                    time: candlestickData[i].time,
-                    value: rsi
-                });
-            }
-            
-            return rsiData;
-        }
+
         
         updateLatestInfo(latestData) {
             if (!latestData) return;
             
-            // 在MT5風格布局中，價格信息已經在交易面板中顯示
-            // 這裡只需要更新圖表標題
+            // 更新圖表標題
             const chartTitle = document.querySelector('.chart-title');
             if (chartTitle) {
                 const symbol = 'US30Cash';
@@ -519,24 +352,11 @@
                 chartTitle.textContent = `${symbol},${timeframe}`;
             }
             
-            // 更新交易面板中的價格
-            const bidElement = document.querySelector('.bid');
-            const askElement = document.querySelector('.ask');
+            // 更新價格信息顯示
+            const close = parseFloat(latestData.close);
+            this.updatePriceInfo(close.toFixed(2), new Date(latestData.timestamp).toLocaleString());
             
-            if (bidElement && askElement) {
-                const close = parseFloat(latestData.close);
-                bidElement.textContent = close.toFixed(2);
-                askElement.textContent = (close + 2).toFixed(2); // 模擬買賣價差
-            }
-            
-            // 更新RSI顯示
-            const rsiData = this.calculateRSI([{close: latestData.close}], 7);
-            if (rsiData.length > 0) {
-                const indicatorHeader = document.querySelector('.indicator-header span');
-                if (indicatorHeader) {
-                    indicatorHeader.textContent = `RSI(7) ${rsiData[rsiData.length - 1].value.toFixed(2)}`;
-                }
-            }
+            console.log('Market Swing - 最新數據已更新:', close);
         }
         
         setupEventListeners() {
@@ -553,49 +373,467 @@
                 });
             });
             
-            // 圖表控制按鈕
-            const chartBtns = document.querySelectorAll('.chart-btn');
-            chartBtns.forEach((btn, index) => {
-                btn.addEventListener('click', () => {
-                    switch(index) {
-                        case 0: // 放大
-                            if (this.mainChart) {
-                                this.mainChart.timeScale().zoomIn();
-                            }
-                            break;
-                        case 1: // 縮小
-                            if (this.mainChart) {
-                                this.mainChart.timeScale().zoomOut();
-                            }
-                            break;
-                        case 2: // 重置
-                            this.resetChart();
-                            break;
-                        case 3: // 設置
-                            console.log('設置按鈕被點擊');
-                            break;
+            // 工具按鈕事件監聽器
+            this.setupToolButtons();
+            
+        }
+        
+        setupToolButtons() {
+            console.log('正在設置工具按鈕...');
+            
+            // 放大按鈕 - 同時縮放時間軸和價格軸
+            const zoomInBtn = document.getElementById('zoom-in');
+            console.log('放大按鈕找到:', !!zoomInBtn);
+            if (zoomInBtn) {
+                zoomInBtn.addEventListener('click', () => {
+                    console.log('放大按鈕被點擊');
+                    if (this.mainChart) {
+                        try {
+                            this.performZoom(0.8); // 縮小到80%，即放大
+                        } catch (error) {
+                            console.error('放大失敗:', error);
+                        }
+                    } else {
+                        console.error('mainChart未初始化');
                     }
                 });
-            });
+            }
+            
+            // 縮小按鈕 - 同時縮放時間軸和價格軸
+            const zoomOutBtn = document.getElementById('zoom-out');
+            console.log('縮小按鈕找到:', !!zoomOutBtn);
+            if (zoomOutBtn) {
+                zoomOutBtn.addEventListener('click', () => {
+                    console.log('縮小按鈕被點擊');
+                    if (this.mainChart) {
+                        try {
+                            this.performZoom(1.25); // 擴大到125%，即縮小
+                        } catch (error) {
+                            console.error('縮小失敗:', error);
+                        }
+                    } else {
+                        console.error('mainChart未初始化');
+                    }
+                });
+            }
+            
+            // 重置縮放按鈕
+            const zoomResetBtn = document.getElementById('zoom-reset');
+            if (zoomResetBtn) {
+                zoomResetBtn.addEventListener('click', () => {
+                    this.resetChart();
+                });
+            }
+            
+            // 十字線按鈕
+            const crosshairBtn = document.getElementById('crosshair');
+            if (crosshairBtn) {
+                crosshairBtn.addEventListener('click', () => {
+                    this.toggleCrosshair(crosshairBtn);
+                });
+            }
+            
+            // 測量工具按鈕 - 修復功能
+            const measureBtn = document.getElementById('measure');
+            console.log('主應用測量按鈕查找結果:', !!measureBtn);
+            if (measureBtn) {
+                // 清除之前可能存在的事件監聽器
+                measureBtn.removeEventListener('click', this.measurementClickHandler);
+                
+                // 創建綁定的事件處理器
+                this.measurementClickHandler = () => {
+                    console.log('主應用測量按鈕被點擊！');
+                    this.toggleMeasurement(measureBtn);
+                };
+                
+                measureBtn.addEventListener('click', this.measurementClickHandler);
+                console.log('主應用測量按鈕事件監聽器已設置');
+            } else {
+                console.error('主應用找不到測量按鈕元素 #measure');
+            }
+            
+            // 全屏按鈕
+            const fullscreenBtn = document.getElementById('fullscreen');
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', () => {
+                    this.toggleFullscreen();
+                });
+            }
         }
         
         resetChart() {
             if (this.mainChart) {
                 this.mainChart.timeScale().fitContent();
             }
-            if (this.indicatorChart) {
-                this.indicatorChart.timeScale().fitContent();
-            }
-            this.measurementPoints = [];
+            this.clearMeasurementLines();
             this.measurementMode = false;
             
-            console.log('圖表已重置');
+            // 重置測量按鈕狀態
+            const button = document.getElementById('measure');
+            if (button && button.classList.contains('active')) {
+                button.classList.remove('active');
+            }
+            
+            console.log('Market Swing圖表已重置');
+        }
+        
+        toggleCrosshair(button) {
+            const isActive = button.classList.toggle('active');
+            
+            if (this.mainChart) {
+                const crosshairMode = isActive ? 1 : 0; // 1 = Normal, 0 = Hidden
+                this.mainChart.applyOptions({
+                    crosshair: {
+                        mode: crosshairMode
+                    }
+                });
+            }
+            
+            console.log('十字線已', isActive ? '開啟' : '關閉');
+        }
+        
+        toggleMeasurement(button) {
+            console.log('toggleMeasurement被調用，當前模式:', this.measurementMode);
+            this.measurementMode = button.classList.toggle('active');
+            console.log('切換後模式:', this.measurementMode);
+            
+            if (!this.measurementMode) {
+                this.measurementPoints = [];
+                this.clearMeasurementLines();
+                console.log('測量模式已關閉');
+                button.style.backgroundColor = '';
+            } else {
+                console.log('測量模式已開啟，點擊圖表設置第一個測量點');
+                button.style.backgroundColor = '#0066ff';
+            }
+        }
+        
+        toggleMeasurementMode() {
+            const button = document.getElementById('measure');
+            if (button) {
+                this.toggleMeasurement(button);
+            }
+        }
+        
+        handleMeasurementClick(param) {
+            console.log('測量點擊事件被觸發，param:', param);
+            console.log('測量模式狀態:', this.measurementMode);
+            console.log('param對象的keys:', Object.keys(param || {}));
+            
+            if (!param || !param.time) {
+                console.log('沒有時間數據，嘗試使用邏輯位置');
+                
+                // 如果沒有時間數據，嘗試從邏輯位置獲取
+                if (param && param.logical !== undefined) {
+                    console.log('使用邏輯位置:', param.logical);
+                    // 使用邏輯位置作為時間值
+                    param.time = param.logical;
+                } else {
+                    console.log('完全沒有位置數據，退出');
+                    return;
+                }
+            }
+            
+            console.log('candlestickSeries存在:', !!this.candlestickSeries);
+            console.log('param.seriesData存在:', !!param.seriesData);
+            
+            let price = null;
+            if (param.seriesData && this.candlestickSeries) {
+                price = param.seriesData.get(this.candlestickSeries);
+                console.log('從seriesData獲取的價格:', price);
+            }
+            
+            // 如果無法從seriesData獲取價格，嘗試其他方法
+            if (!price) {
+                console.log('無法從seriesData獲取價格，嘗試其他方法');
+                
+                // 嘗試使用點擊位置的價格
+                if (param.point && param.point.y !== undefined) {
+                    // 從點擊的Y座標估算價格
+                    const priceScale = this.mainChart.priceScale('right');
+                    if (priceScale && priceScale.coordinateToPrice) {
+                        const estimatedPrice = priceScale.coordinateToPrice(param.point.y);
+                        console.log('從座標估算的價格:', estimatedPrice);
+                        price = { close: estimatedPrice };
+                    }
+                }
+                
+                // 如果還是沒有價格，使用當前最新價格
+                if (!price && this.latestPrice) {
+                    console.log('使用最新價格:', this.latestPrice);
+                    price = { close: this.latestPrice };
+                }
+                
+                if (!price) {
+                    console.log('完全無法獲取價格數據，退出');
+                    return;
+                }
+            }
+            
+            const priceValue = price.close || price.value;
+            const point = {
+                time: param.time,
+                price: priceValue
+            };
+            
+            console.log('有效測量點:', point);
+            
+            // 清除之前的測量標記（如果存在）
+            if (this.measurementPoints.length >= 2) {
+                console.log('清除之前的測量點');
+                this.clearMeasurementLines();
+                this.measurementPoints = [];
+            }
+            
+            this.measurementPoints.push(point);
+            console.log('當前測量點數量:', this.measurementPoints.length);
+            
+            // 創建十字標記
+            const markerColor = this.measurementPoints.length === 1 ? '#0066ff' : '#ff4444'; // 藍色和紅色
+            const markerText = this.measurementPoints.length === 1 ? '▲' : '▼';
+            
+            // 創建標記數據
+            const marker = {
+                time: param.time,
+                position: 'inBar',
+                color: markerColor,
+                shape: 'arrowUp',
+                text: markerText,
+                size: 1
+            };
+            
+            // 將標記添加到series
+            this.measurementLines.push(marker);
+            
+            // 更新所有標記
+            this.candlestickSeries.setMarkers(this.measurementLines);
+            console.log('標記已設置，總標記數:', this.measurementLines.length);
+            
+            if (this.measurementPoints.length === 1) {
+                console.log('第一個測量點設置完成（藍色三角），點擊設置第二個測量點');
+            } else if (this.measurementPoints.length === 2) {
+                console.log('第二個測量點設置完成（紅色三角），正在計算結果...');
+                setTimeout(() => {
+                    this.calculateMeasurement();
+                }, 100);
+            }
+        }
+        
+        calculateMeasurement() {
+            if (this.measurementPoints.length !== 2) return;
+            
+            const [point1, point2] = this.measurementPoints;
+            const priceDiff = Math.abs(point2.price - point1.price);
+            const timeDiff = Math.abs(point2.time - point1.time);
+            
+            // 計算價格變化百分比
+            const priceChangePercent = ((point2.price - point1.price) / point1.price * 100).toFixed(2);
+            
+            // 時間差轉換
+            const timeDiffSeconds = timeDiff;
+            const timeDiffHours = (timeDiffSeconds / 3600).toFixed(2);
+            
+            // 判斷方向
+            const direction = point2.price > point1.price ? '上漲' : '下跌';
+            const directionSymbol = point2.price > point1.price ? '📈' : '📉';
+            
+            console.log('測量結果:', {
+                價格差: priceDiff.toFixed(2),
+                價格變化: `${priceChangePercent}%`,
+                時間差: `${timeDiffHours}小時`,
+                方向: direction
+            });
+            
+            // 顯示測量結果
+            const result = confirm(`${directionSymbol} 測量結果:\n` +
+                `價格差: ${priceDiff.toFixed(2)}\n` +
+                `變化率: ${priceChangePercent}% (${direction})\n` +
+                `時間差: ${timeDiffHours}小時\n\n` +
+                `點擊確定清除測量線，點擊取消保留測量線`);
+            
+            if (result) {
+                this.clearMeasurementLines();
+                // 關閉測量模式
+                const button = document.getElementById('measure');
+                if (button && button.classList.contains('active')) {
+                    button.classList.remove('active');
+                    this.measurementMode = false;
+                }
+            }
+        }
+        
+        // 實用的縮放方法 - 時間軸縮放 + 自動價格軸調整
+        performZoom(scaleFactor) {
+            console.log(`執行縮放，比例: ${scaleFactor}`);
+            
+            const timeScale = this.mainChart.timeScale();
+            
+            try {
+                // 獲取當前時間軸範圍
+                const logicalRange = timeScale.getVisibleLogicalRange();
+                if (!logicalRange) {
+                    console.log('無法獲取時間軸範圍');
+                    return;
+                }
+                
+                console.log('當前時間範圍:', logicalRange);
+                
+                // 計算新的時間軸範圍
+                const currentTimeRange = logicalRange.to - logicalRange.from;
+                const newTimeRange = currentTimeRange * scaleFactor;
+                const timeCenter = (logicalRange.from + logicalRange.to) / 2;
+                
+                // 確保時間軸不會縮放過小或過大
+                if (scaleFactor < 1 && newTimeRange < 2) {
+                    console.log('已達到最大放大限制');
+                    return;
+                }
+                
+                const fullRange = this.dataCount || 50;
+                if (scaleFactor > 1 && newTimeRange > fullRange) {
+                    console.log('已達到最大縮小限制');
+                    return;
+                }
+                
+                // 設置新的時間軸範圍
+                const newLogicalRange = {
+                    from: Math.max(0, timeCenter - newTimeRange / 2),
+                    to: Math.min(fullRange, timeCenter + newTimeRange / 2)
+                };
+                
+                console.log('新時間範圍:', newLogicalRange);
+                
+                // 設置時間軸範圍
+                timeScale.setVisibleLogicalRange(newLogicalRange);
+                
+                // 讓價格軸自動調整以適應可見數據
+                setTimeout(() => {
+                    try {
+                        const priceScale = this.mainChart.priceScale('right');
+                        priceScale.setAutoScale(true);
+                        console.log('價格軸自動縮放已啟用');
+                    } catch (e) {
+                        console.log('價格軸自動縮放設置失敗:', e);
+                    }
+                }, 100);
+                
+                console.log('縮放完成');
+                
+            } catch (error) {
+                console.error('縮放失敗:', error);
+            }
+        }
+        
+        clearMeasurementLines() {
+            // 清除測量標記
+            try {
+                this.candlestickSeries.setMarkers([]);
+            } catch (e) {
+                console.warn('清除測量標記時出錯:', e);
+            }
+            this.measurementLines = [];
+            this.measurementPoints = [];
+            console.log('測量標記已清除');
+        }
+        
+        toggleFullscreen() {
+            const chartArea = document.querySelector('.chart-area');
+            
+            if (!document.fullscreenElement) {
+                chartArea.requestFullscreen().catch(err => {
+                    console.error('無法進入全屏模式:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        
+        // 更新價格和時間信息
+        updatePriceInfo(price, time) {
+            // 保存最新價格供測量功能使用
+            this.latestPrice = parseFloat(price);
+            
+            const priceInfo = document.getElementById('price-info');
+            const timeInfo = document.getElementById('time-info');
+            
+            if (priceInfo) {
+                priceInfo.textContent = `價格: ${price}`;
+            }
+            
+            if (timeInfo) {
+                timeInfo.textContent = time;
+            }
+        }
+        
+        // 更新狀態欄信息
+        updateStatusBar(dataCount, latency) {
+            const dataCountElement = document.getElementById('data-count');
+            const latencyElement = document.getElementById('latency');
+            
+            if (dataCountElement) {
+                dataCountElement.textContent = `數據量: ${dataCount}筆`;
+            }
+            
+            if (latencyElement) {
+                latencyElement.textContent = `延遲: ${latency}ms`;
+            }
         }
     }
     
     // 初始化應用
     document.addEventListener('DOMContentLoaded', () => {
-        console.log('初始化蠟燭圖應用...');
-        window.chartApp = new CandlestickChart();
+        console.log('DOM載入完成，正在初始化Market Swing圖表...');
+        
+        // 多重檢查確保正確初始化
+        function initializeChart() {
+            const mainChartContainer = document.querySelector("#main-chart");
+            
+            if (!mainChartContainer) {
+                console.warn('圖表容器未找到，2秒後重試...');
+                setTimeout(initializeChart, 2000);
+                return;
+            }
+            
+            console.log('圖表容器已找到，創建Market Swing應用...');
+            window.chartApp = new CandlestickChart();
+        }
+        
+        // 立即嘗試初始化，如果失敗則重試
+        try {
+            initializeChart();
+        } catch (error) {
+            console.error('初始化圖表失敗:', error);
+            setTimeout(initializeChart, 1000);
+        }
     });
-    
+
+    // 確保TradingView庫已載入
+    if (typeof LightweightCharts === 'undefined') {
+        console.error('TradingView Lightweight Charts 庫未載入！');
+    } else {
+        console.log('TradingView Lightweight Charts 庫已就緒');
+    }    // 測量按鈕測試 - 立即執行
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('=== 測量按鈕測試開始 ===');
+        setTimeout(() => {
+            const measureBtn = document.getElementById('measure');
+            console.log('直接查找測量按鈕:', measureBtn);
+            console.log('按鈕是否存在:', !!measureBtn);
+            
+            if (measureBtn) {
+                console.log('按鈕文本:', measureBtn.textContent);
+                console.log('按鈕標題:', measureBtn.title);
+                
+                // 添加測試點擊事件
+                measureBtn.addEventListener('click', () => {
+                    console.log('🎯 測量按鈕測試點擊成功！');
+                    alert('測量按鈕測試成功！');
+                });
+                
+                console.log('測試事件監聽器已添加');
+            } else {
+                console.error('❌ 測量按鈕未找到！');
+            }
+        }, 500);
+    });
+
