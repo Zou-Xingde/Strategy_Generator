@@ -13,7 +13,7 @@ class ProfessionalTradingChart {
         this.measurementMode = false;
         this.measurementPoints = [];
         this.config = {};
-        this.container = document.getElementById('tradingview-chart');
+        this.container = document.getElementById('chart');
         
         this.init();
     }
