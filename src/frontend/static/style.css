@@ -8,214 +8,292 @@
 html, body {
     height: 100%;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #2b2b2b;
+    background-color: #1a1a1a;
     color: #ffffff;
     overflow: hidden;
     font-size: 12px;
+    line-height: 1.4;
 }
 
-/* 移除頂部菜單欄樣式 */
-
-/* 主工具欄 */
+/* 主工具欄 - 增強版 */
 .main-toolbar {
-    height: 35px;
-    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
-    border-bottom: 1px solid #1a1a1a;
+    height: 40px;
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    border-bottom: 1px solid #4a5568;
     display: flex;
     align-items: center;
-    padding: 0 8px;
-    gap: 8px;
+    padding: 0 12px;
+    gap: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    position: relative;
+    z-index: 100;
+}
+
+.main-toolbar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #4299e1, transparent);
+    opacity: 0.6;
 }
 
 .toolbar-section {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
 }
 
+/* 工具按鈕 - 現代化設計 */
 .tool-btn {
-    width: 24px;
-    height: 24px;
-    background: linear-gradient(to bottom, #6a6a6a, #5a5a5a);
-    border: 1px solid #4a4a4a;
-    border-radius: 2px;
-    color: #ffffff;
+    width: 32px;
+    height: 28px;
+    background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+    border: 1px solid #718096;
+    border-radius: 6px;
+    color: #e2e8f0;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.tool-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.3s ease;
 }
 
 .tool-btn:hover {
-    background: linear-gradient(to bottom, #7a7a7a, #6a6a6a);
+    background: linear-gradient(135deg, #63b3ed 0%, #4299e1 100%);
+    border-color: #90cdf4;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
 }
 
-.tool-btn:active, .tool-btn.active {
-    background: linear-gradient(to bottom, #4a4a4a, #5a5a5a);
-    border-color: #8a8a8a;
+.tool-btn:hover::before {
+    left: 100%;
+}
+
+.tool-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(66, 153, 225, 0.4);
+}
+
+.tool-btn.active {
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    border-color: #63b3ed;
+    color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .separator {
     width: 1px;
-    height: 20px;
-    background: #3a3a3a;
-    margin: 0 4px;
+    height: 24px;
+    background: linear-gradient(to bottom, transparent, #4a5568, transparent);
+    margin: 0 6px;
 }
 
-/* 時間週期按鈕 */
+/* 時間週期按鈕 - 現代化設計 */
 .timeframe-buttons {
     display: flex;
-    gap: 1px;
-    background: #3a3a3a;
-    border-radius: 2px;
-    padding: 1px;
+    gap: 2px;
+    background: rgba(26, 32, 44, 0.8);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid #4a5568;
+    backdrop-filter: blur(10px);
 }
 
 .tf-btn {
-    padding: 4px 8px;
-    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
+    padding: 6px 12px;
+    background: linear-gradient(135deg, rgba(74, 85, 104, 0.6) 0%, rgba(45, 55, 72, 0.6) 100%);
     border: none;
-    color: #cccccc;
-    font-size: 10px;
+    color: #cbd5e0;
+    font-size: 11px;
+    font-weight: 500;
     cursor: pointer;
-    border-radius: 1px;
-    min-width: 28px;
+    border-radius: 5px;
+    min-width: 34px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.tf-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.3s ease;
 }
 
 .tf-btn:hover {
-    background: linear-gradient(to bottom, #6a6a6a, #5a5a5a);
+    background: linear-gradient(135deg, #63b3ed 0%, #4299e1 100%);
     color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(66, 153, 225, 0.2);
+}
+
+.tf-btn:hover::before {
+    left: 100%;
 }
 
 .tf-btn.active {
-    background: linear-gradient(to bottom, #0078d4, #106ebe);
+    background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
     color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
 }
 
-/* Market Swing 主題 */
+/* Market Swing 主題變量 */
 .market-swing-theme {
     --primary-bg: #000000;
     --secondary-bg: #1a1a1a;
-    --accent-bg: #2a2a2a;
-    --border-color: #333333;
+    --accent-bg: #2d3748;
+    --border-color: #4a5568;
     --text-primary: #ffffff;
-    --text-secondary: #cccccc;
-    --green-color: #00cc00;
-    --red-color: #ff4444;
-    --blue-color: #0078d4;
+    --text-secondary: #e2e8f0;
+    --green-color: #48bb78;
+    --red-color: #f56565;
+    --blue-color: #4299e1;
+    --purple-color: #9f7aea;
 }
 
 /* 主要內容區域 */
 .main-content {
     display: flex;
-    height: calc(100vh - 55px); /* 減去工具欄和狀態欄高度 */
+    height: calc(100vh - 62px);
+    background: var(--primary-bg);
 }
 
-/* 移除左側面板樣式 */
-
-/* 圖表區域 */
+/* 圖表區域 - 現代化設計 */
 .chart-area {
     flex: 1;
     width: 100%;
     display: flex;
     flex-direction: column;
-    background: #2b2b2b;
+    background: var(--primary-bg);
+    position: relative;
 }
 
 .chart-header {
-    height: 25px;
-    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-    border-bottom: 1px solid #1a1a1a;
+    height: 32px;
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    border-bottom: 1px solid #4a5568;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 8px;
+    padding: 0 12px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .chart-title {
-    font-size: 11px;
-    font-weight: bold;
-    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4299e1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .chart-info {
     display: flex;
-    gap: 8px;
-    font-size: 10px;
-    color: #cccccc;
+    gap: 12px;
+    font-size: 11px;
+    color: #cbd5e0;
+    align-items: center;
 }
 
 .chart-info .separator {
-    color: #666666;
+    color: #718096;
+    margin: 0 4px;
 }
 
-/* 主圖表容器 */
+/* 主圖表容器 - 增強版 */
 .main-chart-container {
     flex: 1;
-    background: #000000;
+    background: var(--primary-bg);
     position: relative;
     min-height: 400px;
-    height: calc(100vh - 80px); /* 減去工具欄和狀態欄的高度 */
+    height: calc(100vh - 94px);
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
 }
 
 #main-chart {
     width: 100%;
     height: 100%;
+    border-radius: inherit;
 }
 
-/* 移除指標圖表容器樣式 */
-
-/* 工具按鈕功能增強 */
-.tool-btn[title]:hover::after {
-    content: attr(title);
-    position: absolute;
-    bottom: -25px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1a1a1a;
-    color: #ffffff;
-    padding: 2px 6px;
-    font-size: 9px;
-    border-radius: 2px;
-    white-space: nowrap;
-    z-index: 1000;
-    pointer-events: none;
-}
-
-.tool-btn {
+/* 工具提示增強 */
+.tool-btn[title] {
     position: relative;
 }
 
-.tool-btn.active {
-    background: linear-gradient(to bottom, #0078d4, #106ebe);
-    color: #ffffff;
+.tool-btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    color: #e2e8f0;
+    padding: 6px 10px;
+    font-size: 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 1px solid #4a5568;
+    opacity: 0;
+    animation: tooltipFadeIn 0.2s ease forwards;
 }
 
-.tool-btn:active {
-    transform: translateY(1px);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
 }
 
-/* 移除右側面板樣式 */
-
-/* 底部狀態欄 */
+/* 底部狀態欄 - 現代化 */
 .status-bar {
-    height: 20px;
-    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-    border-top: 1px solid #5a5a5a;
+    height: 24px;
+    background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    border-top: 1px solid #4a5568;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 8px;
+    padding: 0 12px;
     font-size: 10px;
-    color: #cccccc;
+    color: #cbd5e0;
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .status-left, .status-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
 }
 
 .status-bar .separator {
@@ -223,30 +301,124 @@ html, body {
     height: auto;
     background: none;
     margin: 0;
-    color: #666666;
+    color: #718096;
 }
 
-/* 滾動條樣式 */
+/* 狀態指示器 */
+#connection-status {
+    color: #48bb78;
+    font-weight: 500;
+}
+
+#connection-status::before {
+    content: '●';
+    margin-right: 4px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* 滾動條現代化 */
 ::-webkit-scrollbar {
-    width: 12px;
-    height: 12px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #2a2a2a;
+    background: #1a202c;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #4a4a4a;
-    border-radius: 6px;
-    border: 2px solid #2a2a2a;
+    background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+    border-radius: 4px;
+    border: 1px solid #2d3748;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #5a5a5a;
+    background: linear-gradient(135deg, #63b3ed 0%, #4299e1 100%);
 }
 
 ::-webkit-scrollbar-corner {
-    background: #2a2a2a;
+    background: #1a202c;
+}
+
+/* 新增：按鈕點擊波紋效果 */
+.tool-btn, .tf-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.tool-btn:active::after, .tf-btn:active::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: ripple 0.6s ease-out;
+}
+
+@keyframes ripple {
+    to {
+        width: 60px;
+        height: 60px;
+        opacity: 0;
+    }
+}
+
+/* 載入動畫 */
+.loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #4299e1;
+    font-size: 14px;
+}
+
+.loading-indicator::after {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #4a5568;
+    border-top-color: #4299e1;
+    border-radius: 50%;
+    margin-left: 8px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 響應式設計增強 */
+@media (max-width: 768px) {
+    .main-toolbar {
+        height: 45px;
+        padding: 0 8px;
+    }
+    
+    .tf-btn {
+        padding: 6px 8px;
+        min-width: 28px;
+        font-size: 10px;
+    }
+    
+    .tool-btn {
+        width: 28px;
+        height: 26px;
+    }
+    
+    .chart-info {
+        gap: 8px;
+        font-size: 10px;
+    }
 }
     
