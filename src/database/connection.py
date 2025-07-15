@@ -35,7 +35,6 @@ class DuckDBConnection:
             # 創建蠟燭圖資料表
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS candlestick_data (
-                    id INTEGER PRIMARY KEY,
                     symbol VARCHAR(20),
                     timeframe VARCHAR(5),
                     timestamp TIMESTAMP,
@@ -93,7 +92,10 @@ class DuckDBConnection:
             if 'timestamp' not in df.columns:
                 df['timestamp'] = df.index
             
-            # 插入資料
+            # 重置索引以確保有正確的行號
+            df = df.reset_index(drop=True)
+            
+            # 批次插入資料
             self.conn.execute("""
                 INSERT INTO candlestick_data 
                 (symbol, timeframe, timestamp, open, high, low, close, volume)
