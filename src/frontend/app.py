@@ -1,14 +1,16 @@
-import dash
-from dash import dcc, html, Input, Output, State, callback_context
-import plotly.graph_objects as go
-import plotly.express as px
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 import pandas as pd
 import numpy as np
 import sys
 import os
 from datetime import datetime, timedelta
 import json
-import dash_bootstrap_components as dbc
+from typing import Optional, List, Dict
+import uvicorn
+from pathlib import Path
 
 # 添加專案根目錄到路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -19,389 +21,716 @@ from config.settings import (
 )
 from src.database.connection import DuckDBConnection
 
-# 初始化Dash應用
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-app.title = "市場波段規律分析系統"
+# 創建FastAPI應用
+app = FastAPI(title="市場波段規律分析系統", version="1.0.0")
+
+# 靜態文件和模板
+static_dir = Path(__file__).parent / "static"
+templates_dir = Path(__file__).parent / "templates"
+
+# 創建目錄（如果不存在）
+static_dir.mkdir(exist_ok=True)
+templates_dir.mkdir(exist_ok=True)
+
+# 掛載靜態文件
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# 模板引擎
+templates = Jinja2Templates(directory=str(templates_dir))
 
 # 全局變數
-current_symbol = "EXUSA30IDXUSD"  # 默認交易品種
-measurement_mode = False
-measurement_points = []
+current_symbol = "EXUSA30IDXUSD"
 
-# 應用布局
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            html.H1("市場波段規律分析系統", className="text-center mb-4"),
-            html.Hr()
-        ])
-    ]),
+class CandlestickData:
+    """蠟燭圖資料類別"""
     
-    dbc.Row([
-        dbc.Col([
-            # 時間週期選擇按鈕
-            dbc.ButtonGroup([
-                dbc.Button("M1", id="btn-M1", color="primary", outline=True),
-                dbc.Button("M5", id="btn-M5", color="primary", outline=True),
-                dbc.Button("M15", id="btn-M15", color="primary", outline=True),
-                dbc.Button("M30", id="btn-M30", color="primary", outline=True),
-                dbc.Button("H1", id="btn-H1", color="primary", outline=True),
-                dbc.Button("H4", id="btn-H4", color="primary", outline=True),
-                dbc.Button("D1", id="btn-D1", color="primary", outline=True, active=True),
-            ], className="mb-3"),
-            
-            # 工具按鈕
-            dbc.ButtonGroup([
-                dbc.Button("測量工具", id="btn-measure", color="info", outline=True),
-                dbc.Button("重置", id="btn-reset", color="warning", outline=True),
-                dbc.Button("放大", id="btn-zoom-in", color="success", outline=True),
-                dbc.Button("縮小", id="btn-zoom-out", color="success", outline=True),
-            ], className="mb-3 ms-3"),
-            
-        ], width=12),
-    ]),
-    
-    dbc.Row([
-        dbc.Col([
-            # 蠟燭圖顯示區域
-            dcc.Graph(
-                id="candlestick-chart",
-                style={"height": "70vh"},
-                config={
-                    'displayModeBar': True,
-                    'toImageButtonOptions': {
-                        'format': 'png',
-                        'filename': 'candlestick_chart',
-                        'height': 800,
-                        'width': 1200,
-                        'scale': 1
-                    }
+    @staticmethod
+    def get_data(symbol: str, timeframe: str, start_date: Optional[str] = None, 
+                 end_date: Optional[str] = None) -> Dict:
+        """獲取蠟燭圖資料"""
+        try:
+            with DuckDBConnection(str(DUCKDB_PATH)) as db:
+                df = db.get_candlestick_data(symbol, timeframe, start_date, end_date)
+                
+                if df.empty:
+                    return {"data": [], "message": "暫無資料"}
+                
+                # 轉換為前端所需格式
+                data = []
+                for timestamp, row in df.iterrows():
+                    data.append({
+                        "timestamp": timestamp.isoformat(),
+                        "open": float(row['open']),
+                        "high": float(row['high']),
+                        "low": float(row['low']),
+                        "close": float(row['close']),
+                        "volume": int(row['volume'])
+                    })
+                
+                return {
+                    "data": data,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "count": len(data)
                 }
-            )
-        ], width=12),
-    ]),
-    
-    dbc.Row([
-        dbc.Col([
-            # 資訊顯示區域
-            html.Div(id="info-display", className="mt-3"),
-            
-            # 測量結果顯示
-            html.Div(id="measurement-result", className="mt-3"),
-            
-        ], width=12),
-    ]),
-    
-    # 隱藏的數據存儲
-    dcc.Store(id="current-timeframe", data="D1"),
-    dcc.Store(id="chart-data", data={}),
-    dcc.Store(id="measurement-data", data={"points": [], "mode": False}),
-    dcc.Store(id="zoom-range", data={}),
-    
-], fluid=True)
+                
+        except Exception as e:
+            return {"error": str(e), "data": []}
 
-def get_candlestick_data(symbol: str, timeframe: str) -> pd.DataFrame:
-    """從資料庫獲取蠟燭圖資料"""
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    """主頁面"""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/api/candlestick/{symbol}/{timeframe}")
+async def get_candlestick_data(
+    symbol: str, 
+    timeframe: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """獲取蠟燭圖資料API"""
+    
+    if timeframe not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="不支援的時間週期")
+    
+    data = CandlestickData.get_data(symbol, timeframe, start_date, end_date)
+    
+    if "error" in data:
+        raise HTTPException(status_code=500, detail=data["error"])
+    
+    return data
+
+@app.get("/api/timeframes/{symbol}")
+async def get_available_timeframes(symbol: str):
+    """獲取可用時間週期"""
     try:
         with DuckDBConnection(str(DUCKDB_PATH)) as db:
-            df = db.get_candlestick_data(symbol, timeframe)
-            return df
+            timeframes = db.get_available_timeframes(symbol)
+            return {"timeframes": timeframes}
     except Exception as e:
-        print(f"Error getting candlestick data: {e}")
-        return pd.DataFrame()
+        raise HTTPException(status_code=500, detail=str(e))
 
-def create_candlestick_chart(df: pd.DataFrame, timeframe: str, measurement_points: list = None, zoom_range: dict = None):
-    """創建蠟燭圖"""
-    if df.empty:
-        return go.Figure().add_annotation(
-            text="暫無資料",
-            xref="paper", yref="paper",
-            x=0.5, y=0.5,
-            showarrow=False,
-            font=dict(size=20)
-        )
-    
-    fig = go.Figure()
-    
-    # 添加蠟燭圖
-    fig.add_trace(go.Candlestick(
-        x=df.index,
-        open=df['open'],
-        high=df['high'],
-        low=df['low'],
-        close=df['close'],
-        name=f"{timeframe} 蠟燭圖",
-        increasing_line_color=CANDLESTICK_COLORS['increasing'],
-        decreasing_line_color=CANDLESTICK_COLORS['decreasing'],
-        increasing_fillcolor=CANDLESTICK_COLORS['increasing'],
-        decreasing_fillcolor=CANDLESTICK_COLORS['decreasing'],
-    ))
-    
-    # 添加成交量（子圖）
-    if 'volume' in df.columns:
-        fig.add_trace(go.Bar(
-            x=df.index,
-            y=df['volume'],
-            name="成交量",
-            yaxis="y2",
-            marker_color="rgba(0, 0, 255, 0.3)"
-        ))
-    
-    # 添加測量線
-    if measurement_points and len(measurement_points) >= 2:
-        # 藍色線（第一個點）
-        fig.add_shape(
-            type="line",
-            x0=measurement_points[0]['x'], y0=df['low'].min(),
-            x1=measurement_points[0]['x'], y1=df['high'].max(),
-            line=dict(color=MEASUREMENT_COLORS['line1'], width=2, dash="dash"),
-            name="測量線1"
-        )
+@app.get("/api/config")
+async def get_config():
+    """獲取前端配置"""
+    return {
+        "timeframes": TIMEFRAMES,
+        "colors": {
+            "measurement": MEASUREMENT_COLORS,
+            "candlestick": CANDLESTICK_COLORS
+        },
+        "symbol": current_symbol
+    }
+
+@app.post("/api/measurement")
+async def calculate_measurement(data: Dict):
+    """計算測量結果"""
+    try:
+        point1 = data["point1"]
+        point2 = data["point2"]
         
-        # 紅色線（第二個點）
-        fig.add_shape(
-            type="line",
-            x0=measurement_points[1]['x'], y0=df['low'].min(),
-            x1=measurement_points[1]['x'], y1=df['high'].max(),
-            line=dict(color=MEASUREMENT_COLORS['line2'], width=2, dash="dash"),
-            name="測量線2"
-        )
-    
-    # 設置圖表布局
-    fig.update_layout(
-        title=f"{current_symbol} - {timeframe} 蠟燭圖",
-        xaxis_title="時間",
-        yaxis_title="價格",
-        xaxis_rangeslider_visible=False,
-        height=600,
-        template="plotly_white",
-        showlegend=True,
-        yaxis2=dict(
-            title="成交量",
-            overlaying="y",
-            side="right",
-            range=[0, df['volume'].max() * 4] if 'volume' in df.columns else None
-        )
-    )
-    
-    # 設置縮放範圍
-    if zoom_range:
-        fig.update_layout(
-            xaxis=dict(range=zoom_range.get('x', [df.index.min(), df.index.max()])),
-            yaxis=dict(range=zoom_range.get('y', [df['low'].min(), df['high'].max()]))
-        )
-    
-    return fig
-
-# 時間週期切換回調
-@app.callback(
-    [Output("current-timeframe", "data"),
-     Output("chart-data", "data"),
-     Output("candlestick-chart", "figure")],
-    [Input("btn-M1", "n_clicks"),
-     Input("btn-M5", "n_clicks"),
-     Input("btn-M15", "n_clicks"),
-     Input("btn-M30", "n_clicks"),
-     Input("btn-H1", "n_clicks"),
-     Input("btn-H4", "n_clicks"),
-     Input("btn-D1", "n_clicks")],
-    [State("current-timeframe", "data"),
-     State("measurement-data", "data"),
-     State("zoom-range", "data")]
-)
-def update_timeframe(m1, m5, m15, m30, h1, h4, d1, current_tf, measurement_data, zoom_range):
-    # 確定觸發的按鈕
-    ctx = callback_context
-    if not ctx.triggered:
-        timeframe = "D1"
-    else:
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        timeframe = button_id.split('-')[1]
-    
-    # 獲取資料
-    df = get_candlestick_data(current_symbol, timeframe)
-    
-    # 創建圖表
-    fig = create_candlestick_chart(
-        df, timeframe, 
-        measurement_data.get('points', []) if measurement_data else [], 
-        zoom_range if zoom_range else {}
-    )
-    
-    # 將DataFrame轉換為字典以存儲
-    chart_data = df.to_dict('records') if not df.empty else {}
-    
-    return timeframe, chart_data, fig
-
-# 測量工具回調
-@app.callback(
-    [Output("measurement-data", "data"),
-     Output("measurement-result", "children")],
-    [Input("btn-measure", "n_clicks"),
-     Input("btn-reset", "n_clicks"),
-     Input("candlestick-chart", "clickData")],
-    [State("measurement-data", "data"),
-     State("chart-data", "data")]
-)
-def handle_measurement(measure_clicks, reset_clicks, click_data, measurement_data, chart_data):
-    ctx = callback_context
-    if not ctx.triggered:
-        return measurement_data, ""
-    
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    if trigger_id == "btn-measure":
-        # 切換測量模式
-        measurement_data['mode'] = not measurement_data.get('mode', False)
-        measurement_data['points'] = []
-        return measurement_data, "測量模式已開啟，請點擊圖表上的兩個點" if measurement_data['mode'] else ""
-    
-    elif trigger_id == "btn-reset":
-        # 重置測量
-        measurement_data['mode'] = False
-        measurement_data['points'] = []
-        return measurement_data, ""
-    
-    elif trigger_id == "candlestick-chart" and click_data and measurement_data.get('mode', False):
-        # 添加測量點
-        points = measurement_data.get('points', [])
+        # 計算價格差異
+        price_diff = abs(point2["y"] - point1["y"])
         
-        if len(points) < 2:
-            point = {
-                'x': click_data['points'][0]['x'],
-                'y': click_data['points'][0]['y']
-            }
-            points.append(point)
-            measurement_data['points'] = points
+        # 計算時間差異
+        time1 = datetime.fromisoformat(point1["x"].replace("Z", "+00:00"))
+        time2 = datetime.fromisoformat(point2["x"].replace("Z", "+00:00"))
+        time_diff = abs(time2 - time1)
+        
+        return {
+            "price_diff": price_diff,
+            "time_diff": str(time_diff),
+            "point1": point1,
+            "point2": point2
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+def create_static_files():
+    """創建靜態文件"""
+    
+    # 創建CSS文件
+    css_content = """
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f8f9fa;
+    }
+
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    h1 {
+        text-align: center;
+        color: #333;
+        margin-bottom: 30px;
+    }
+
+    .controls {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background-color: #0056b3;
+    }
+
+    .btn-primary.active {
+        background-color: #0056b3;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.5);
+    }
+
+    .btn-info {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .btn-info:hover {
+        background-color: #138496;
+    }
+
+    .btn-warning {
+        background-color: #ffc107;
+        color: #212529;
+    }
+
+    .btn-warning:hover {
+        background-color: #e0a800;
+    }
+
+    .btn-success {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .btn-success:hover {
+        background-color: #218838;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 600px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+
+    .info-panel {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+
+    .info-item {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .info-item h6 {
+        color: #007bff;
+        margin-bottom: 10px;
+    }
+
+    .info-item p {
+        margin: 5px 0;
+        color: #666;
+    }
+
+    .measurement-result {
+        background: #e9ecef;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 10px;
+    }
+
+    .measurement-result h5 {
+        color: #17a2b8;
+        margin-bottom: 10px;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 50px;
+        color: #666;
+    }
+
+    .error {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 10px 0;
+    }
+
+    @media (max-width: 768px) {
+        .controls {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .info-row {
+            flex-direction: column;
+        }
+        
+        .btn {
+            width: 100%;
+            max-width: 200px;
+        }
+    }
+    """
+    
+    with open(static_dir / "style.css", "w", encoding="utf-8") as f:
+        f.write(css_content)
+    
+    # 創建JavaScript文件
+    js_content = """
+    class CandlestickChart {
+        constructor() {
+            this.chart = null;
+            this.currentTimeframe = 'D1';
+            this.symbol = 'EXUSA30IDXUSD';
+            this.measurementMode = false;
+            this.measurementPoints = [];
+            this.config = {};
             
-            if len(points) == 2:
-                # 計算點差
-                x1, y1 = points[0]['x'], points[0]['y']
-                x2, y2 = points[1]['x'], points[1]['y']
-                
-                # 計算價格差異
-                price_diff = abs(y2 - y1)
-                
-                # 計算時間差異
-                time1 = pd.to_datetime(x1)
-                time2 = pd.to_datetime(x2)
-                time_diff = abs(time2 - time1)
-                
-                result = html.Div([
-                    html.H5("測量結果:", className="text-info"),
-                    html.P(f"價格差異: {price_diff:.5f}"),
-                    html.P(f"時間差異: {time_diff}"),
-                    html.P(f"點1: {x1} @ {y1:.5f}"),
-                    html.P(f"點2: {x2} @ {y2:.5f}"),
-                ], className="border p-3 mt-2")
-                
-                measurement_data['mode'] = False  # 測量完成後關閉模式
-                return measurement_data, result
+            this.init();
+        }
         
-        return measurement_data, f"已選擇 {len(points)} 個點，{'請選擇第二個點' if len(points) == 1 else '測量完成'}"
+        async init() {
+            await this.loadConfig();
+            await this.loadChart();
+            this.setupEventListeners();
+        }
+        
+        async loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                this.config = await response.json();
+                this.symbol = this.config.symbol;
+            } catch (error) {
+                console.error('載入配置失敗:', error);
+            }
+        }
+        
+        async loadChart(timeframe = 'D1') {
+            this.currentTimeframe = timeframe;
+            
+            try {
+                const response = await fetch(`/api/candlestick/${this.symbol}/${timeframe}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                this.renderChart(data.data);
+                this.updateInfo(data);
+                
+            } catch (error) {
+                console.error('載入圖表失敗:', error);
+                this.showError('載入圖表資料失敗: ' + error.message);
+            }
+        }
+        
+        renderChart(data) {
+            if (!data || data.length === 0) {
+                this.showError('暫無資料');
+                return;
+            }
+            
+            // 準備資料
+            const timestamps = data.map(d => d.timestamp);
+            const ohlcData = data.map(d => [
+                new Date(d.timestamp).getTime(),
+                d.open,
+                d.high,
+                d.low,
+                d.close
+            ]);
+            
+            const volumeData = data.map(d => [
+                new Date(d.timestamp).getTime(),
+                d.volume
+            ]);
+            
+            // 圖表配置
+            const options = {
+                chart: {
+                    type: 'candlestick',
+                    height: 600,
+                    toolbar: {
+                        show: true
+                    },
+                    events: {
+                        click: (event, chartContext, config) => {
+                            if (this.measurementMode) {
+                                this.addMeasurementPoint(event, config);
+                            }
+                        }
+                    }
+                },
+                title: {
+                    text: `${this.symbol} - ${this.currentTimeframe} 蠟燭圖`,
+                    align: 'center'
+                },
+                xaxis: {
+                    type: 'datetime',
+                    labels: {
+                        datetimeFormatter: {
+                            year: 'yyyy',
+                            month: 'MMM \'yy',
+                            day: 'dd MMM',
+                            hour: 'HH:mm'
+                        }
+                    }
+                },
+                yaxis: [
+                    {
+                        title: {
+                            text: '價格'
+                        },
+                        tooltip: {
+                            enabled: true
+                        }
+                    },
+                    {
+                        opposite: true,
+                        title: {
+                            text: '成交量'
+                        },
+                        max: Math.max(...volumeData.map(d => d[1])) * 4
+                    }
+                ],
+                tooltip: {
+                    shared: true,
+                    custom: function({seriesIndex, dataPointIndex, w}) {
+                        const data = w.globals.initialSeries[seriesIndex].data[dataPointIndex];
+                        if (seriesIndex === 0) {
+                            return `<div class="tooltip">
+                                <strong>${new Date(data.x).toLocaleString()}</strong><br>
+                                開: ${data.y[0]}<br>
+                                高: ${data.y[1]}<br>
+                                低: ${data.y[2]}<br>
+                                收: ${data.y[3]}
+                            </div>`;
+                        }
+                        return '';
+                    }
+                }
+            };
+            
+            // 創建圖表
+            if (this.chart) {
+                this.chart.destroy();
+            }
+            
+            this.chart = new ApexCharts(document.querySelector("#chart"), {
+                ...options,
+                series: [
+                    {
+                        name: '蠟燭圖',
+                        type: 'candlestick',
+                        data: ohlcData
+                    },
+                    {
+                        name: '成交量',
+                        type: 'column',
+                        data: volumeData,
+                        yAxisIndex: 1
+                    }
+                ]
+            });
+            
+            this.chart.render();
+        }
+        
+        setupEventListeners() {
+            // 時間週期按鈕
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    this.loadChart(e.target.dataset.timeframe);
+                });
+            });
+            
+            // 測量工具按鈕
+            document.getElementById('measureBtn').addEventListener('click', () => {
+                this.toggleMeasurementMode();
+            });
+            
+            // 重置按鈕
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                this.resetMeasurement();
+            });
+            
+            // 縮放按鈕
+            document.getElementById('zoomInBtn').addEventListener('click', () => {
+                if (this.chart) {
+                    this.chart.zoomIn();
+                }
+            });
+            
+            document.getElementById('zoomOutBtn').addEventListener('click', () => {
+                if (this.chart) {
+                    this.chart.zoomOut();
+                }
+            });
+        }
+        
+        toggleMeasurementMode() {
+            this.measurementMode = !this.measurementMode;
+            const btn = document.getElementById('measureBtn');
+            
+            if (this.measurementMode) {
+                btn.textContent = '取消測量';
+                btn.classList.add('active');
+                this.measurementPoints = [];
+                this.updateMeasurementResult('測量模式已開啟，請點擊圖表上的兩個點');
+            } else {
+                btn.textContent = '測量工具';
+                btn.classList.remove('active');
+                this.resetMeasurement();
+            }
+        }
+        
+        addMeasurementPoint(event, config) {
+            if (this.measurementPoints.length >= 2) {
+                return;
+            }
+            
+            const point = {
+                x: new Date(config.w.globals.seriesX[0][config.dataPointIndex]).toISOString(),
+                y: config.w.globals.seriesY[0][config.dataPointIndex]
+            };
+            
+            this.measurementPoints.push(point);
+            
+            if (this.measurementPoints.length === 2) {
+                this.calculateMeasurement();
+            } else {
+                this.updateMeasurementResult(`已選擇第 ${this.measurementPoints.length} 個點`);
+            }
+        }
+        
+        async calculateMeasurement() {
+            try {
+                const response = await fetch('/api/measurement', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        point1: this.measurementPoints[0],
+                        point2: this.measurementPoints[1]
+                    })
+                });
+                
+                const result = await response.json();
+                this.displayMeasurementResult(result);
+                
+            } catch (error) {
+                console.error('計算測量失敗:', error);
+                this.updateMeasurementResult('計算測量失敗');
+            }
+        }
+        
+        displayMeasurementResult(result) {
+            const html = `
+                <div class="measurement-result">
+                    <h5>測量結果:</h5>
+                    <p><strong>價格差異:</strong> ${result.price_diff.toFixed(5)}</p>
+                    <p><strong>時間差異:</strong> ${result.time_diff}</p>
+                    <p><strong>點1:</strong> ${new Date(result.point1.x).toLocaleString()} @ ${result.point1.y.toFixed(5)}</p>
+                    <p><strong>點2:</strong> ${new Date(result.point2.x).toLocaleString()} @ ${result.point2.y.toFixed(5)}</p>
+                </div>
+            `;
+            
+            document.getElementById('measurementResult').innerHTML = html;
+            this.measurementMode = false;
+            document.getElementById('measureBtn').textContent = '測量工具';
+            document.getElementById('measureBtn').classList.remove('active');
+        }
+        
+        resetMeasurement() {
+            this.measurementPoints = [];
+            this.measurementMode = false;
+            document.getElementById('measureBtn').textContent = '測量工具';
+            document.getElementById('measureBtn').classList.remove('active');
+            document.getElementById('measurementResult').innerHTML = '';
+        }
+        
+        updateInfo(data) {
+            if (!data.data || data.data.length === 0) {
+                return;
+            }
+            
+            const latest = data.data[data.data.length - 1];
+            
+            document.getElementById('currentSymbol').textContent = data.symbol;
+            document.getElementById('currentTimeframe').textContent = data.timeframe;
+            document.getElementById('dataCount').textContent = data.count;
+            
+            document.getElementById('latestOpen').textContent = latest.open.toFixed(5);
+            document.getElementById('latestHigh').textContent = latest.high.toFixed(5);
+            document.getElementById('latestLow').textContent = latest.low.toFixed(5);
+            document.getElementById('latestClose').textContent = latest.close.toFixed(5);
+            
+            document.getElementById('latestVolume').textContent = latest.volume.toLocaleString();
+            document.getElementById('latestTime').textContent = new Date(latest.timestamp).toLocaleString();
+        }
+        
+        updateMeasurementResult(message) {
+            document.getElementById('measurementResult').innerHTML = `<p>${message}</p>`;
+        }
+        
+        showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(errorDiv, container.firstChild);
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+    }
     
-    return measurement_data, ""
+    // 初始化應用
+    document.addEventListener('DOMContentLoaded', () => {
+        new CandlestickChart();
+    });
+    """
+    
+    with open(static_dir / "app.js", "w", encoding="utf-8") as f:
+        f.write(js_content)
 
-# 縮放控制回調
-@app.callback(
-    [Output("zoom-range", "data"),
-     Output("candlestick-chart", "figure", allow_duplicate=True)],
-    [Input("btn-zoom-in", "n_clicks"),
-     Input("btn-zoom-out", "n_clicks")],
-    [State("candlestick-chart", "relayoutData"),
-     State("current-timeframe", "data"),
-     State("chart-data", "data"),
-     State("measurement-data", "data"),
-     State("zoom-range", "data")],
-    prevent_initial_call=True
-)
-def handle_zoom(zoom_in, zoom_out, relayout_data, timeframe, chart_data, measurement_data, zoom_range):
-    ctx = callback_context
-    if not ctx.triggered or not chart_data:
-        return zoom_range, dash.no_update
-    
-    df = pd.DataFrame(chart_data)
-    if df.empty:
-        return zoom_range, dash.no_update
-    
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df = df.set_index('timestamp')
-    
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    if trigger_id == "btn-zoom-in":
-        # 放大：縮小時間範圍
-        current_range = zoom_range.get('x', [df.index.min(), df.index.max()])
-        time_span = pd.to_datetime(current_range[1]) - pd.to_datetime(current_range[0])
-        new_span = time_span * 0.5  # 縮小到一半
+def create_template():
+    """創建HTML模板"""
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>市場波段規律分析系統</title>
+        <link rel="stylesheet" href="/static/style.css">
+        <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h1>市場波段規律分析系統</h1>
+            
+            <!-- 控制按鈕 -->
+            <div class="controls">
+                <!-- 時間週期按鈕 -->
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M1">M1</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M5">M5</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M15">M15</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M30">M30</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="H1">H1</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="H4">H4</button>
+                <button class="btn btn-primary timeframe-btn active" data-timeframe="D1">D1</button>
+                
+                <!-- 工具按鈕 -->
+                <button class="btn btn-info" id="measureBtn">測量工具</button>
+                <button class="btn btn-warning" id="resetBtn">重置</button>
+                <button class="btn btn-success" id="zoomInBtn">放大</button>
+                <button class="btn btn-success" id="zoomOutBtn">縮小</button>
+            </div>
+            
+            <!-- 圖表區域 -->
+            <div class="chart-container">
+                <div id="chart"></div>
+            </div>
+            
+            <!-- 資訊面板 -->
+            <div class="info-panel">
+                <div class="info-row">
+                    <div class="info-item">
+                        <h6>當前資訊</h6>
+                        <p>交易品種: <span id="currentSymbol">-</span></p>
+                        <p>時間週期: <span id="currentTimeframe">-</span></p>
+                        <p>資料筆數: <span id="dataCount">-</span></p>
+                    </div>
+                    
+                    <div class="info-item">
+                        <h6>最新價格</h6>
+                        <p>開盤: <span id="latestOpen">-</span></p>
+                        <p>最高: <span id="latestHigh">-</span></p>
+                        <p>最低: <span id="latestLow">-</span></p>
+                        <p>收盤: <span id="latestClose">-</span></p>
+                    </div>
+                    
+                    <div class="info-item">
+                        <h6>成交量</h6>
+                        <p>成交量: <span id="latestVolume">-</span></p>
+                        <p>時間: <span id="latestTime">-</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 測量結果 -->
+            <div id="measurementResult"></div>
+        </div>
         
-        center = pd.to_datetime(current_range[0]) + time_span / 2
-        new_start = center - new_span / 2
-        new_end = center + new_span / 2
-        
-        zoom_range['x'] = [new_start, new_end]
-        
-    elif trigger_id == "btn-zoom-out":
-        # 縮小：擴大時間範圍
-        current_range = zoom_range.get('x', [df.index.min(), df.index.max()])
-        time_span = pd.to_datetime(current_range[1]) - pd.to_datetime(current_range[0])
-        new_span = time_span * 2  # 擴大到兩倍
-        
-        center = pd.to_datetime(current_range[0]) + time_span / 2
-        new_start = max(center - new_span / 2, df.index.min())
-        new_end = min(center + new_span / 2, df.index.max())
-        
-        zoom_range['x'] = [new_start, new_end]
+        <script src="/static/app.js"></script>
+    </body>
+    </html>
+    """
     
-    # 重新創建圖表
-    fig = create_candlestick_chart(
-        df, timeframe,
-        measurement_data.get('points', []),
-        zoom_range
-    )
-    
-    return zoom_range, fig
+    with open(templates_dir / "index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
 
-# 資訊顯示回調
-@app.callback(
-    Output("info-display", "children"),
-    [Input("current-timeframe", "data"),
-     Input("chart-data", "data")]
-)
-def update_info(timeframe, chart_data):
-    if not chart_data:
-        return html.Div("暫無資料", className="text-muted")
-    
-    df = pd.DataFrame(chart_data)
-    if df.empty:
-        return html.Div("暫無資料", className="text-muted")
-    
-    latest_record = df.iloc[-1]
-    
-    return dbc.Row([
-        dbc.Col([
-            html.H6("當前資訊:", className="text-primary"),
-            html.P(f"交易品種: {current_symbol}"),
-            html.P(f"時間週期: {timeframe}"),
-            html.P(f"資料筆數: {len(df)}"),
-        ], width=4),
-        dbc.Col([
-            html.H6("最新價格:", className="text-primary"),
-            html.P(f"開盤: {latest_record.get('open', 'N/A'):.5f}"),
-            html.P(f"最高: {latest_record.get('high', 'N/A'):.5f}"),
-            html.P(f"最低: {latest_record.get('low', 'N/A'):.5f}"),
-            html.P(f"收盤: {latest_record.get('close', 'N/A'):.5f}"),
-        ], width=4),
-        dbc.Col([
-            html.H6("成交量:", className="text-primary"),
-            html.P(f"成交量: {latest_record.get('volume', 'N/A')}"),
-            html.P(f"時間: {latest_record.get('timestamp', 'N/A')}"),
-        ], width=4),
-    ])
+# 創建靜態文件和模板
+create_static_files()
+create_template()
 
 if __name__ == "__main__":
-    app.run_server(
-        debug=True,
+    print("🚀 啟動市場波段規律分析系統...")
+    print(f"📊 系統將在 http://{FRONTEND_HOST}:{FRONTEND_PORT} 啟動")
+    print("✨ 使用FastAPI + ApexCharts 提供高性能體驗")
+    
+    uvicorn.run(
+        "src.frontend.app:app",
         host=FRONTEND_HOST,
-        port=FRONTEND_PORT
+        port=FRONTEND_PORT,
+        reload=True,
+        log_level="info"
     ) 

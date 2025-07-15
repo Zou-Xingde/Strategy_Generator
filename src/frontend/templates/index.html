@@ -1,0 +1,71 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>市場波段規律分析系統</title>
+        <link rel="stylesheet" href="/static/style.css">
+        <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h1>市場波段規律分析系統</h1>
+            
+            <!-- 控制按鈕 -->
+            <div class="controls">
+                <!-- 時間週期按鈕 -->
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M1">M1</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M5">M5</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M15">M15</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="M30">M30</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="H1">H1</button>
+                <button class="btn btn-primary timeframe-btn" data-timeframe="H4">H4</button>
+                <button class="btn btn-primary timeframe-btn active" data-timeframe="D1">D1</button>
+                
+                <!-- 工具按鈕 -->
+                <button class="btn btn-info" id="measureBtn">測量工具</button>
+                <button class="btn btn-warning" id="resetBtn">重置</button>
+                <button class="btn btn-success" id="zoomInBtn">放大</button>
+                <button class="btn btn-success" id="zoomOutBtn">縮小</button>
+            </div>
+            
+            <!-- 圖表區域 -->
+            <div class="chart-container">
+                <div id="chart"></div>
+            </div>
+            
+            <!-- 資訊面板 -->
+            <div class="info-panel">
+                <div class="info-row">
+                    <div class="info-item">
+                        <h6>當前資訊</h6>
+                        <p>交易品種: <span id="currentSymbol">-</span></p>
+                        <p>時間週期: <span id="currentTimeframe">-</span></p>
+                        <p>資料筆數: <span id="dataCount">-</span></p>
+                    </div>
+                    
+                    <div class="info-item">
+                        <h6>最新價格</h6>
+                        <p>開盤: <span id="latestOpen">-</span></p>
+                        <p>最高: <span id="latestHigh">-</span></p>
+                        <p>最低: <span id="latestLow">-</span></p>
+                        <p>收盤: <span id="latestClose">-</span></p>
+                    </div>
+                    
+                    <div class="info-item">
+                        <h6>成交量</h6>
+                        <p>成交量: <span id="latestVolume">-</span></p>
+                        <p>時間: <span id="latestTime">-</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 測量結果 -->
+            <div id="measurementResult"></div>
+        </div>
+        
+        <script src="/static/app.js"></script>
+    </body>
+    </html>
+    

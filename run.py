@@ -24,8 +24,8 @@ def run_data_processing():
 
 def run_frontend():
     """運行前端界面"""
-    print("正在啟動前端界面...")
-    subprocess.run([sys.executable, "src/frontend/app.py"])
+    print("正在啟動FastAPI前端界面...")
+    subprocess.run([sys.executable, "-m", "uvicorn", "src.frontend.app:app", "--host", "127.0.0.1", "--port", "8050", "--reload"])
 
 def run_tests():
     """運行測試"""
