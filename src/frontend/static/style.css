@@ -1,160 +1,488 @@
+/* 全域設置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
-    body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        margin: 0;
-        padding: 0;
-        background-color: #f8f9fa;
-    }
+html, body {
+    height: 100%;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #2b2b2b;
+    color: #ffffff;
+    overflow: hidden;
+    font-size: 12px;
+}
 
-    .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 20px;
-    }
+/* 頂部菜單欄 */
+.menu-bar {
+    height: 20px;
+    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+}
 
-    h1 {
-        text-align: center;
-        color: #333;
-        margin-bottom: 30px;
-    }
+.menu-items {
+    display: flex;
+    gap: 16px;
+}
 
-    .controls {
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-        margin-bottom: 20px;
-        flex-wrap: wrap;
-    }
+.menu-item {
+    color: #ffffff;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 2px;
+}
 
-    .btn {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: all 0.3s ease;
-    }
+.menu-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
 
-    .btn-primary {
-        background-color: #007bff;
-        color: white;
-    }
+/* 主工具欄 */
+.main-toolbar {
+    height: 35px;
+    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 8px;
+}
 
-    .btn-primary:hover {
-        background-color: #0056b3;
-    }
+.toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
 
-    .btn-primary.active {
-        background-color: #0056b3;
-        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.5);
-    }
+.tool-btn {
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(to bottom, #6a6a6a, #5a5a5a);
+    border: 1px solid #4a4a4a;
+    border-radius: 2px;
+    color: #ffffff;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-    .btn-info {
-        background-color: #17a2b8;
-        color: white;
-    }
+.tool-btn:hover {
+    background: linear-gradient(to bottom, #7a7a7a, #6a6a6a);
+}
 
-    .btn-info:hover {
-        background-color: #138496;
-    }
+.tool-btn:active, .tool-btn.active {
+    background: linear-gradient(to bottom, #4a4a4a, #5a5a5a);
+    border-color: #8a8a8a;
+}
 
-    .btn-warning {
-        background-color: #ffc107;
-        color: #212529;
-    }
+.separator {
+    width: 1px;
+    height: 20px;
+    background: #3a3a3a;
+    margin: 0 4px;
+}
 
-    .btn-warning:hover {
-        background-color: #e0a800;
-    }
+/* 時間週期按鈕 */
+.timeframe-buttons {
+    display: flex;
+    gap: 1px;
+    background: #3a3a3a;
+    border-radius: 2px;
+    padding: 1px;
+}
 
-    .btn-success {
-        background-color: #28a745;
-        color: white;
-    }
+.tf-btn {
+    padding: 4px 8px;
+    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
+    border: none;
+    color: #cccccc;
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 1px;
+    min-width: 28px;
+}
 
-    .btn-success:hover {
-        background-color: #218838;
-    }
+.tf-btn:hover {
+    background: linear-gradient(to bottom, #6a6a6a, #5a5a5a);
+    color: #ffffff;
+}
 
-    .chart-container {
-        position: relative;
-        height: 600px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
+.tf-btn.active {
+    background: linear-gradient(to bottom, #0078d4, #106ebe);
+    color: #ffffff;
+}
 
-    .info-panel {
-        background: white;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
+/* 主要內容區域 */
+.main-content {
+    display: flex;
+    height: calc(100vh - 75px); /* 減去菜單欄、工具欄和狀態欄高度 */
+}
 
-    .info-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 20px;
-        flex-wrap: wrap;
-    }
+/* 左側面板 */
+.left-panel {
+    width: 200px;
+    background: #363636;
+    border-right: 1px solid #1a1a1a;
+    display: flex;
+    flex-direction: column;
+}
 
-    .info-item {
-        flex: 1;
-        min-width: 200px;
-    }
+.panel-header {
+    height: 25px;
+    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #ffffff;
+}
 
-    .info-item h6 {
-        color: #007bff;
-        margin-bottom: 10px;
-    }
+.symbol-list {
+    flex: 1;
+    overflow-y: auto;
+}
 
-    .info-item p {
-        margin: 5px 0;
-        color: #666;
-    }
+.symbol-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid #2a2a2a;
+    cursor: pointer;
+    font-size: 10px;
+}
 
-    .measurement-result {
-        background: #e9ecef;
-        border: 1px solid #dee2e6;
-        border-radius: 5px;
-        padding: 15px;
-        margin-top: 10px;
-    }
+.symbol-item:hover {
+    background: #404040;
+}
 
-    .measurement-result h5 {
-        color: #17a2b8;
-        margin-bottom: 10px;
-    }
+.symbol-item.active {
+    background: #0078d4;
+}
 
-    .loading {
-        text-align: center;
-        padding: 50px;
-        color: #666;
-    }
+.symbol-name {
+    font-weight: bold;
+    color: #ffffff;
+}
 
-    .error {
-        background: #f8d7da;
-        color: #721c24;
-        padding: 15px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
+.symbol-price {
+    color: #ffffff;
+    text-align: right;
+    font-family: 'Courier New', monospace;
+}
 
-    @media (max-width: 768px) {
-        .controls {
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .info-row {
-            flex-direction: column;
-        }
-        
-        .btn {
-            width: 100%;
-            max-width: 200px;
-        }
-    }
+.symbol-change {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+}
+
+.symbol-change.positive {
+    color: #00ff00;
+}
+
+.symbol-change.negative {
+    color: #ff4444;
+}
+
+/* 中央圖表區域 */
+.chart-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #2b2b2b;
+}
+
+.chart-header {
+    height: 25px;
+    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+}
+
+.chart-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.chart-controls {
+    display: flex;
+    gap: 2px;
+}
+
+.chart-btn {
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
+    border: 1px solid #3a3a3a;
+    border-radius: 2px;
+    color: #ffffff;
+    cursor: pointer;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-btn:hover {
+    background: linear-gradient(to bottom, #6a6a6a, #5a5a5a);
+}
+
+/* 主圖表容器 */
+.main-chart-container {
+    flex: 1;
+    background: #000000;
+    position: relative;
+}
+
+#main-chart {
+    width: 100%;
+    height: 100%;
+}
+
+/* 指標圖表容器 */
+.indicator-container {
+    height: 120px;
+    background: #000000;
+    border-top: 1px solid #1a1a1a;
+    display: flex;
+    flex-direction: column;
+}
+
+.indicator-header {
+    height: 20px;
+    background: #2a2a2a;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 10px;
+    color: #cccccc;
+}
+
+#indicator-chart {
+    flex: 1;
+}
+
+/* 右側面板 */
+.right-panel {
+    width: 250px;
+    background: #363636;
+    border-left: 1px solid #1a1a1a;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-tabs {
+    height: 25px;
+    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+}
+
+.tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+    border-right: 1px solid #1a1a1a;
+    color: #cccccc;
+}
+
+.tab:last-child {
+    border-right: none;
+}
+
+.tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tab.active {
+    background: #0078d4;
+    color: #ffffff;
+}
+
+/* 交易面板 */
+.trading-panel {
+    flex: 1;
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.symbol-info {
+    margin-bottom: 16px;
+}
+
+.symbol-header {
+    font-size: 14px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.price-display {
+    background: #2a2a2a;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+.bid-ask {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.bid, .ask {
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.bid {
+    color: #ff4444;
+}
+
+.ask {
+    color: #00ff00;
+}
+
+.spread {
+    font-size: 10px;
+    color: #cccccc;
+    text-align: center;
+}
+
+/* 訂單面板 */
+.order-panel {
+    background: #2a2a2a;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+.order-type {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.order-btn {
+    flex: 1;
+    height: 32px;
+    border: none;
+    border-radius: 2px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.order-btn.buy {
+    background: #00aa00;
+    color: #ffffff;
+}
+
+.order-btn.sell {
+    background: #aa0000;
+    color: #ffffff;
+}
+
+.order-btn:hover {
+    opacity: 0.8;
+}
+
+.order-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-row label {
+    width: 50px;
+    font-size: 10px;
+    color: #cccccc;
+}
+
+.input-row input {
+    flex: 1;
+    height: 22px;
+    background: #1a1a1a;
+    border: 1px solid #4a4a4a;
+    border-radius: 2px;
+    color: #ffffff;
+    padding: 0 6px;
+    font-size: 10px;
+}
+
+.input-row input:focus {
+    outline: none;
+    border-color: #0078d4;
+}
+
+/* 底部狀態欄 */
+.status-bar {
+    height: 20px;
+    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+    border-top: 1px solid #5a5a5a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    font-size: 10px;
+    color: #cccccc;
+}
+
+.status-left, .status-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-bar .separator {
+    width: auto;
+    height: auto;
+    background: none;
+    margin: 0;
+    color: #666666;
+}
+
+/* 滾動條樣式 */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #4a4a4a;
+    border-radius: 6px;
+    border: 2px solid #2a2a2a;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5a;
+}
+
+::-webkit-scrollbar-corner {
+    background: #2a2a2a;
+}
     

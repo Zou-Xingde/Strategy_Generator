@@ -1,71 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>市場波段規律分析系統</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <!-- 頂部菜單欄 -->
+    <div class="menu-bar">
+        <div class="menu-items">
+            <span class="menu-item">文件(F)</span>
+            <span class="menu-item">查看(V)</span>
+            <span class="menu-item">插入(I)</span>
+            <span class="menu-item">圖表(C)</span>
+            <span class="menu-item">工具(T)</span>
+            <span class="menu-item">窗口(W)</span>
+            <span class="menu-item">幫助(H)</span>
+        </div>
+    </div>
 
-    <!DOCTYPE html>
-    <html lang="zh-TW">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>市場波段規律分析系統</title>
-        <link rel="stylesheet" href="/static/style.css">
-        <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
-    </head>
-    <body>
-        <div class="container">
-            <h1>市場波段規律分析系統</h1>
-            
-            <!-- 控制按鈕 -->
-            <div class="controls">
-                <!-- 時間週期按鈕 -->
-                <button class="btn btn-primary timeframe-btn" data-timeframe="M1">M1</button>
-                <button class="btn btn-primary timeframe-btn" data-timeframe="M5">M5</button>
-                <button class="btn btn-primary timeframe-btn" data-timeframe="M15">M15</button>
-                <button class="btn btn-primary timeframe-btn" data-timeframe="M30">M30</button>
-                <button class="btn btn-primary timeframe-btn" data-timeframe="H1">H1</button>
-                <button class="btn btn-primary timeframe-btn" data-timeframe="H4">H4</button>
-                <button class="btn btn-primary timeframe-btn active" data-timeframe="D1">D1</button>
-                
-                <!-- 工具按鈕 -->
-                <button class="btn btn-info" id="measureBtn">測量工具</button>
-                <button class="btn btn-warning" id="resetBtn">重置</button>
-                <button class="btn btn-success" id="zoomInBtn">放大</button>
-                <button class="btn btn-success" id="zoomOutBtn">縮小</button>
+    <!-- 主工具欄 -->
+    <div class="main-toolbar">
+        <div class="toolbar-section">
+            <button class="tool-btn active">📊</button>
+            <button class="tool-btn">📈</button>
+            <button class="tool-btn">📉</button>
+            <button class="tool-btn">➖</button>
+            <button class="tool-btn">🔄</button>
+            <div class="separator"></div>
+            <button class="tool-btn">💾</button>
+            <button class="tool-btn">📷</button>
+            <button class="tool-btn">🖨️</button>
+        </div>
+        
+        <div class="toolbar-section">
+            <div class="timeframe-buttons">
+                <button class="tf-btn" data-timeframe="M1">M1</button>
+                <button class="tf-btn" data-timeframe="M5">M5</button>
+                <button class="tf-btn" data-timeframe="M15">M15</button>
+                <button class="tf-btn" data-timeframe="M30">M30</button>
+                <button class="tf-btn" data-timeframe="H1">H1</button>
+                <button class="tf-btn" data-timeframe="H4">H4</button>
+                <button class="tf-btn active" data-timeframe="D1">D1</button>
+                <button class="tf-btn" data-timeframe="W1">W1</button>
+                <button class="tf-btn" data-timeframe="MN">MN</button>
             </div>
-            
-            <!-- 圖表區域 -->
-            <div class="chart-container">
-                <div id="chart"></div>
+        </div>
+
+        <div class="toolbar-section">
+            <button class="tool-btn">🎯</button>
+            <button class="tool-btn">📏</button>
+            <button class="tool-btn">✏️</button>
+            <button class="tool-btn">🔍</button>
+            <button class="tool-btn">⚙️</button>
+        </div>
+    </div>
+
+    <!-- 主要內容區域 -->
+    <div class="main-content">
+        <!-- 左側面板 -->
+        <div class="left-panel">
+            <div class="panel-header">市場觀察</div>
+            <div class="symbol-list">
+                <div class="symbol-item active">
+                    <span class="symbol-name">US30Cash</span>
+                    <span class="symbol-price">44205.25</span>
+                    <span class="symbol-change negative">-24.35</span>
+                </div>
+                <div class="symbol-item">
+                    <span class="symbol-name">EURUSD</span>
+                    <span class="symbol-price">1.0892</span>
+                    <span class="symbol-change positive">+0.0012</span>
+                </div>
+                <div class="symbol-item">
+                    <span class="symbol-name">GBPUSD</span>
+                    <span class="symbol-price">1.2756</span>
+                    <span class="symbol-change negative">-0.0008</span>
+                </div>
             </div>
-            
-            <!-- 資訊面板 -->
-            <div class="info-panel">
-                <div class="info-row">
-                    <div class="info-item">
-                        <h6>當前資訊</h6>
-                        <p>交易品種: <span id="currentSymbol">-</span></p>
-                        <p>時間週期: <span id="currentTimeframe">-</span></p>
-                        <p>資料筆數: <span id="dataCount">-</span></p>
-                    </div>
-                    
-                    <div class="info-item">
-                        <h6>最新價格</h6>
-                        <p>開盤: <span id="latestOpen">-</span></p>
-                        <p>最高: <span id="latestHigh">-</span></p>
-                        <p>最低: <span id="latestLow">-</span></p>
-                        <p>收盤: <span id="latestClose">-</span></p>
-                    </div>
-                    
-                    <div class="info-item">
-                        <h6>成交量</h6>
-                        <p>成交量: <span id="latestVolume">-</span></p>
-                        <p>時間: <span id="latestTime">-</span></p>
-                    </div>
+        </div>
+
+        <!-- 中央圖表區域 -->
+        <div class="chart-area">
+            <!-- 圖表標題欄 -->
+            <div class="chart-header">
+                <span class="chart-title">US30Cash,D1</span>
+                <div class="chart-controls">
+                    <button class="chart-btn">🔍+</button>
+                    <button class="chart-btn">🔍-</button>
+                    <button class="chart-btn">🔄</button>
+                    <button class="chart-btn">⚙️</button>
                 </div>
             </div>
             
-            <!-- 測量結果 -->
-            <div id="measurementResult"></div>
+            <!-- 主圖表容器 -->
+            <div class="main-chart-container">
+                <div id="main-chart"></div>
+            </div>
+            
+            <!-- 指標圖表容器 -->
+            <div class="indicator-container">
+                <div class="indicator-header">
+                    <span>RSI(7) 42.16</span>
+                </div>
+                <div id="indicator-chart"></div>
+            </div>
         </div>
-        
-        <script src="/static/app.js"></script>
-    </body>
-    </html>
+
+        <!-- 右側面板 -->
+        <div class="right-panel">
+            <div class="panel-tabs">
+                <div class="tab active">交易</div>
+                <div class="tab">歷史</div>
+                <div class="tab">新聞</div>
+            </div>
+            
+            <div class="trading-panel">
+                <div class="symbol-info">
+                    <div class="symbol-header">US30Cash</div>
+                    <div class="price-display">
+                        <div class="bid-ask">
+                            <span class="bid">44205.25</span>
+                            <span class="ask">44207.35</span>
+                        </div>
+                        <div class="spread">點差: 2.1</div>
+                    </div>
+                </div>
+                
+                <div class="order-panel">
+                    <div class="order-type">
+                        <button class="order-btn buy">買入</button>
+                        <button class="order-btn sell">賣出</button>
+                    </div>
+                    
+                    <div class="order-details">
+                        <div class="input-row">
+                            <label>手數:</label>
+                            <input type="number" value="0.01" step="0.01">
+                        </div>
+                        <div class="input-row">
+                            <label>止損:</label>
+                            <input type="number" placeholder="0.00">
+                        </div>
+                        <div class="input-row">
+                            <label>止盈:</label>
+                            <input type="number" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部狀態欄 -->
+    <div class="status-bar">
+        <div class="status-left">
+            <span>已連接</span>
+            <span class="separator">|</span>
+            <span>2024/01/15 02:15:30</span>
+        </div>
+        <div class="status-right">
+            <span>延遲: 12ms</span>
+            <span class="separator">|</span>
+            <span>餘額: $10,000.00</span>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
     

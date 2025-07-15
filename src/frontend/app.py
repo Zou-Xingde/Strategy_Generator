@@ -82,6 +82,8 @@ async def index(request: Request):
     """主頁面"""
     return templates.TemplateResponse("index.html", {"request": request})
 
+
+
 @app.get("/api/candlestick/{symbol}/{timeframe}")
 async def get_candlestick_data(
     symbol: str, 
@@ -719,8 +721,8 @@ def create_template():
         f.write(html_content)
 
 # 創建靜態文件和模板
-create_static_files()
-create_template()
+# create_static_files()  # 已手動創建，註釋掉避免覆蓋
+# create_template()      # 已手動創建，註釋掉避免覆蓋
 
 if __name__ == "__main__":
     print("🚀 啟動市場波段規律分析系統...")
