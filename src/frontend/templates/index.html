@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Market Swing - 市場波段規律分析系統</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=1.9">
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="market-swing-theme">
@@ -57,6 +57,36 @@
         </div>
     </div>
 
+    <!-- 測量結果懸浮視窗 -->
+    <div id="measurement-popup" class="measurement-popup" style="display: none;">
+        <div class="measurement-header">
+            <span class="measurement-title">📏 測量結果</span>
+            <button class="measurement-close" onclick="closeMeasurementPopup()">×</button>
+        </div>
+        <div class="measurement-content">
+            <div class="measurement-item">
+                <span class="measurement-label">價格差:</span>
+                <span id="measurement-price-diff" class="measurement-value">0.00</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">變化率:</span>
+                <span id="measurement-change-percent" class="measurement-value">0.00%</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">時間差:</span>
+                <span id="measurement-time-diff" class="measurement-value">0小時</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">方向:</span>
+                <span id="measurement-direction" class="measurement-value">-</span>
+            </div>
+        </div>
+        <div class="measurement-actions">
+            <button class="measurement-btn measurement-btn-clear" onclick="clearMeasurementAndClose()">清除測量</button>
+            <button class="measurement-btn measurement-btn-keep" onclick="keepMeasurementAndClose()">保留測量</button>
+        </div>
+    </div>
+
     <!-- 底部狀態欄 -->
     <div class="status-bar">
         <div class="status-left">
@@ -71,7 +101,7 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2.4"></script>
 </body>
 </html>
     

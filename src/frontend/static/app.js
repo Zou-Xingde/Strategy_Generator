@@ -3,6 +3,7 @@
         constructor() {
             this.mainChart = null;
             this.candlestickSeries = null;
+            this.measurementLineSeries = null; // 測量連接線系列
             this.currentTimeframe = 'D1';
             this.symbol = 'EXUSA30IDXUSD';
             this.measurementMode = false;
@@ -102,7 +103,7 @@
                     width: width,
                     height: height,
                     layout: {
-                        backgroundColor: '#000000',
+                        backgroundColor: '#2a2a2a',
                         textColor: '#ffffff',
                     },
                     grid: {
@@ -114,7 +115,7 @@
                         },
                     },
                     crosshair: {
-                        mode: LightweightCharts.CrosshairMode.Hidden,
+                        mode: LightweightCharts.CrosshairMode.Normal,
                     },
                     rightPriceScale: {
                         borderVisible: false,
@@ -148,7 +149,18 @@
                     wickDownColor: '#ff4444',
                 });
                 
+                // 添加測量連接線系列
+                this.measurementLineSeries = this.mainChart.addLineSeries({
+                    color: '#ffffff',
+                    lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    crosshairMarkerVisible: false,
+                    lastValueVisible: false,
+                    priceLineVisible: false,
+                });
+                
                 console.log('Candlestick series added - Market Swing style');
+                console.log('Measurement line series added');
                 
                 // 響應式處理
                 this.handleResize();
@@ -201,7 +213,19 @@
             try {
                 console.log(`載入 ${this.symbol} ${timeframe} 數據...`);
                 
-                const response = await fetch(`/api/candlestick/${this.symbol}/${timeframe}`);
+                // 根據時間週期調整數據限制
+                let dataLimit = 10000; // 默認限制
+                if (timeframe === 'M1') dataLimit = 5000;  // 1分鐘數據較多，限制更嚴格
+                if (timeframe === 'M5') dataLimit = 8000;
+                if (timeframe === 'M15') dataLimit = 10000;
+                if (timeframe === 'M30') dataLimit = 12000;
+                if (timeframe === 'H1') dataLimit = 15000;
+                if (timeframe === 'H4') dataLimit = 20000;
+                if (timeframe === 'D1') dataLimit = 25000;
+                if (timeframe === 'W1') dataLimit = 30000;
+                if (timeframe === 'MN') dataLimit = 50000;
+                
+                const response = await fetch(`/api/candlestick/${this.symbol}/${timeframe}?limit=${dataLimit}`);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -218,7 +242,7 @@
                     return;
                 }
                 
-                console.log(`收到 ${data.data.length} 條數據`);
+                console.log(`收到 ${data.data.length} 條數據 (限制: ${dataLimit})`);
                 console.log('數據樣本:', data.data.slice(0, 3));
                 
                 // 檢查圖表是否已初始化
@@ -231,11 +255,17 @@
                     }
                 }
                 
+                // 優化數據處理 - 限制處理的數據量
+                const maxProcessData = Math.min(data.data.length, dataLimit);
+                const dataToProcess = data.data.slice(-maxProcessData); // 取最新的數據
+                
+                console.log(`處理 ${dataToProcess.length} 條數據 (從總共 ${data.data.length} 條中)`);
+                
                 // 先去除重複的時間戳，保留最後一條記錄
                 const uniqueData = [];
                 const timeMap = new Map();
                 
-                data.data.forEach(item => {
+                dataToProcess.forEach(item => {
                     if (item && item.timestamp) {
                         const timeKey = item.timestamp;
                         // 總是用最新的數據覆蓋（保留最後一條）
@@ -315,11 +345,32 @@
                     // 自動縮放到適當比例 - 像TradingView和MT5一樣
                     setTimeout(() => {
                         this.mainChart.timeScale().fitContent();
-                        console.log('自動縮放完成');
+                        console.log('初始自動縮放完成');
+                        
+                        // 自動放大11個階段 - 使用更直接的方法
+                        setTimeout(() => {
+                            const timeScale = this.mainChart.timeScale();
+                            const logicalRange = timeScale.getVisibleLogicalRange();
+                            
+                            if (logicalRange) {
+                                // 計算放大11次後的範圍
+                                const currentTimeRange = logicalRange.to - logicalRange.from;
+                                const zoomedTimeRange = currentTimeRange * Math.pow(0.8, 11); // 0.8的11次方
+                                const timeCenter = (logicalRange.from + logicalRange.to) / 2;
+                                
+                                const newLogicalRange = {
+                                    from: Math.max(0, timeCenter - zoomedTimeRange / 2),
+                                    to: Math.min(this.dataCount || 50, timeCenter + zoomedTimeRange / 2)
+                                };
+                                
+                                timeScale.setVisibleLogicalRange(newLogicalRange);
+                                console.log('自動放大11個階段完成');
+                            }
+                        }, 300);
                     }, 100);
                     
                     // 更新最新數據顯示 - 只有在有有效數據時才更新
-                    const validData = data.data.filter(item => 
+                    const validData = dataToProcess.filter(item => 
                         item && item.timestamp && 
                         item.open !== null && item.close !== null
                     );
@@ -520,6 +571,15 @@
             console.log('測量模式狀態:', this.measurementMode);
             console.log('param對象的keys:', Object.keys(param || {}));
             
+            // 詳細調試座標信息
+            if (param && param.point) {
+                console.log('點擊座標詳情:', {
+                    'X座標': param.point.x,
+                    'Y座標': param.point.y,
+                    '座標類型': typeof param.point.x + ', ' + typeof param.point.y
+                });
+            }
+            
             if (!param || !param.time) {
                 console.log('沒有時間數據，嘗試使用邏輯位置');
                 
@@ -538,45 +598,107 @@
             console.log('param.seriesData存在:', !!param.seriesData);
             
             let price = null;
+            let timeValue = param.time;
+            
+            // 優先從seriesData獲取價格
             if (param.seriesData && this.candlestickSeries) {
                 price = param.seriesData.get(this.candlestickSeries);
                 console.log('從seriesData獲取的價格:', price);
             }
             
-            // 如果無法從seriesData獲取價格，嘗試其他方法
-            if (!price) {
-                console.log('無法從seriesData獲取價格，嘗試其他方法');
+            // 嘗試從seriesPrices獲取價格
+            if (!price && param.seriesPrices && param.seriesPrices.size > 0) {
+                console.log('嘗試從seriesPrices獲取價格');
+                console.log('seriesPrices內容:', param.seriesPrices);
                 
-                // 嘗試使用點擊位置的價格
-                if (param.point && param.point.y !== undefined) {
-                    // 從點擊的Y座標估算價格
-                    const priceScale = this.mainChart.priceScale('right');
-                    if (priceScale && priceScale.coordinateToPrice) {
-                        const estimatedPrice = priceScale.coordinateToPrice(param.point.y);
-                        console.log('從座標估算的價格:', estimatedPrice);
-                        price = { close: estimatedPrice };
+                // 遍歷所有系列數據
+                for (const [series, data] of param.seriesPrices) {
+                    console.log('系列:', series);
+                    console.log('數據:', data);
+                    
+                    if (series === this.candlestickSeries && data) {
+                        price = data;
+                        console.log('✅ 從seriesPrices獲取到價格:', data);
+                        break;
                     }
                 }
+            }
+            
+            // 如果無法從seriesData獲取價格，嘗試從點擊位置獲取
+            if (!price && param.point && param.point.y !== undefined) {
+                console.log('嘗試從點擊位置獲取價格');
+                console.log('Y座標值:', param.point.y);
                 
-                // 如果還是沒有價格，使用當前最新價格
-                if (!price && this.latestPrice) {
-                    console.log('使用最新價格:', this.latestPrice);
-                    price = { close: this.latestPrice };
-                }
+                // 嘗試從可見範圍估算價格
+                const priceScale = this.mainChart.priceScale('right');
+                console.log('價格軸對象:', priceScale);
                 
-                if (!price) {
-                    console.log('完全無法獲取價格數據，退出');
-                    return;
+                if (priceScale && typeof priceScale.getVisibleRange === 'function') {
+                    console.log('使用可見範圍估算');
+                    const range = priceScale.getVisibleRange();
+                    if (range) {
+                        const totalHeight = this.mainChart.height();
+                        const yRatio = param.point.y / totalHeight;
+                        const estimatedPrice = range.minValue + (range.maxValue - range.minValue) * (1 - yRatio);
+                        
+                        console.log('可見範圍估算:', {
+                            '範圍': range,
+                            '總高度': totalHeight,
+                            'Y比例': yRatio,
+                            '估算價格': estimatedPrice
+                        });
+                        
+                        // 驗證估算價格是否合理（基於數據庫中的價格範圍）
+                        if (estimatedPrice && !isNaN(estimatedPrice) && estimatedPrice > 10000 && estimatedPrice < 13000) {
+                            price = { close: estimatedPrice };
+                            console.log('✅ 使用可見範圍估算價格:', estimatedPrice);
+                        } else {
+                            console.log('❌ 估算價格超出合理範圍，跳過');
+                            console.log('價格範圍檢查:', {
+                                '有值': !!estimatedPrice,
+                                '非NaN': !isNaN(estimatedPrice),
+                                '大於10000': estimatedPrice > 10000,
+                                '小於13000': estimatedPrice < 13000,
+                                '實際值': estimatedPrice
+                            });
+                        }
+                    } else {
+                        console.log('❌ 無法獲取可見範圍');
+                    }
+                } else {
+                    console.log('❌ 價格軸或getVisibleRange方法不存在');
                 }
+            }
+            
+            // 最後的備用方案：使用當前最新價格
+            if (!price && this.latestPrice) {
+                console.log('使用最新價格作為備用:', this.latestPrice);
+                price = { close: this.latestPrice };
+            }
+            
+            if (!price) {
+                console.log('完全無法獲取價格數據，退出');
+                return;
             }
             
             const priceValue = price.close || price.value;
             const point = {
-                time: param.time,
+                time: timeValue,
                 price: priceValue
             };
             
             console.log('有效測量點:', point);
+            
+            // 檢查是否與之前的測量點價格相同
+            if (this.measurementPoints.length > 0) {
+                const lastPoint = this.measurementPoints[this.measurementPoints.length - 1];
+                console.log('與前一個測量點比較:', {
+                    '前一個價格': lastPoint.price,
+                    '當前價格': priceValue,
+                    '價格相同': lastPoint.price === priceValue,
+                    '時間相同': lastPoint.time === timeValue
+                });
+            }
             
             // 清除之前的測量標記（如果存在）
             if (this.measurementPoints.length >= 2) {
@@ -588,22 +710,27 @@
             this.measurementPoints.push(point);
             console.log('當前測量點數量:', this.measurementPoints.length);
             
-            // 創建十字標記
-            const markerColor = this.measurementPoints.length === 1 ? '#0066ff' : '#ff4444'; // 藍色和紅色
-            const markerText = this.measurementPoints.length === 1 ? '▲' : '▼';
+            // 創建測量點標記 - 十字樣式
+            const markerColor = this.measurementPoints.length === 1 ? '#00aaff' : '#ff6600'; // 亮藍色和橙色
+            const markerText = this.measurementPoints.length === 1 ? '✚' : '✚'; // 使用十字
             
             // 創建標記數據
             const marker = {
-                time: param.time,
+                time: timeValue,
                 position: 'inBar',
                 color: markerColor,
-                shape: 'arrowUp',
+                shape: 'cross',
                 text: markerText,
                 size: 1
             };
             
             // 將標記添加到series
             this.measurementLines.push(marker);
+            
+            // 如果有兩個測量點，添加連接線
+            if (this.measurementPoints.length === 2) {
+                this.addConnectionLine();
+            }
             
             // 更新所有標記
             this.candlestickSeries.setMarkers(this.measurementLines);
@@ -623,43 +750,181 @@
             if (this.measurementPoints.length !== 2) return;
             
             const [point1, point2] = this.measurementPoints;
+            
+            console.log('測量點1:', point1);
+            console.log('測量點2:', point2);
+            
+            // 計算價格差異（絕對值）
             const priceDiff = Math.abs(point2.price - point1.price);
-            const timeDiff = Math.abs(point2.time - point1.time);
             
-            // 計算價格變化百分比
-            const priceChangePercent = ((point2.price - point1.price) / point1.price * 100).toFixed(2);
+            // 計算價格變化（從第一點到第二點，保留正負號）
+            const priceChange = point2.price - point1.price;
+            let priceChangePercent;
             
-            // 時間差轉換
-            const timeDiffSeconds = timeDiff;
-            const timeDiffHours = (timeDiffSeconds / 3600).toFixed(2);
+            // 確保基準價格不為0，避免除零錯誤
+            if (point1.price !== 0) {
+                priceChangePercent = ((priceChange / point1.price) * 100).toFixed(2);
+            } else {
+                priceChangePercent = '0.00';
+            }
             
-            // 判斷方向
-            const direction = point2.price > point1.price ? '上漲' : '下跌';
-            const directionSymbol = point2.price > point1.price ? '📈' : '📉';
-            
-            console.log('測量結果:', {
-                價格差: priceDiff.toFixed(2),
-                價格變化: `${priceChangePercent}%`,
-                時間差: `${timeDiffHours}小時`,
-                方向: direction
+            console.log('價格計算調試:', {
+                '第一點價格': point1.price,
+                '第二點價格': point2.price,
+                '價格變化': priceChange,
+                '變化率': priceChangePercent
             });
             
-            // 顯示測量結果
-            const result = confirm(`${directionSymbol} 測量結果:\n` +
-                `價格差: ${priceDiff.toFixed(2)}\n` +
-                `變化率: ${priceChangePercent}% (${direction})\n` +
-                `時間差: ${timeDiffHours}小時\n\n` +
-                `點擊確定清除測量線，點擊取消保留測量線`);
-            
-            if (result) {
-                this.clearMeasurementLines();
-                // 關閉測量模式
-                const button = document.getElementById('measure');
-                if (button && button.classList.contains('active')) {
-                    button.classList.remove('active');
-                    this.measurementMode = false;
+            // 正確處理時間差
+            let timeDiffText = '0天0時0分';
+            try {
+                // 統一時間處理：將所有時間轉換為Date對象進行計算
+                let time1, time2;
+                
+                if (typeof point1.time === 'number' && typeof point2.time === 'number') {
+                    // 檢查是否為Unix時間戳（通常大於1000000000）
+                    if (point1.time > 1000000000 && point2.time > 1000000000) {
+                        // Unix時間戳（秒），轉換為毫秒
+                        time1 = new Date(point1.time * 1000);
+                        time2 = new Date(point2.time * 1000);
+                        
+                        console.log('時間計算調試 (Unix時間戳):', {
+                            '時間1原始值': point1.time,
+                            '時間2原始值': point2.time,
+                            '時間1轉換後': time1.toISOString(),
+                            '時間2轉換後': time2.toISOString()
+                        });
+                    } else {
+                        // 邏輯位置，需要根據時間週期計算
+                        const timeDiff = Math.abs(point2.time - point1.time);
+                        const timeframeMultiplier = this.getTimeframeMultiplier();
+                        const timeDiffMs = timeDiff * timeframeMultiplier;
+                        
+                        // 使用當前時間作為基準，向前推算
+                        const now = new Date();
+                        time1 = new Date(now.getTime() - timeDiffMs);
+                        time2 = now;
+                        
+                        console.log('時間計算調試 (邏輯位置):', {
+                            '邏輯時間差': timeDiff,
+                            '時間週期倍數': timeframeMultiplier,
+                            '總毫秒差': timeDiffMs,
+                            '時間1': time1.toISOString(),
+                            '時間2': time2.toISOString()
+                        });
+                    }
+                } else {
+                    // 如果時間是字符串，直接解析
+                    time1 = new Date(point1.time);
+                    time2 = new Date(point2.time);
+                    
+                    console.log('時間計算調試 (字符串時間):', {
+                        '時間1原始值': point1.time,
+                        '時間2原始值': point2.time,
+                        '時間1解析後': time1.toISOString(),
+                        '時間2解析後': time2.toISOString()
+                    });
                 }
+                
+                // 驗證時間對象是否有效
+                if (isNaN(time1.getTime()) || isNaN(time2.getTime())) {
+                    throw new Error('無效的時間值');
+                }
+                
+                // 計算時間差（毫秒）
+                const timeDiffMs = Math.abs(time2.getTime() - time1.getTime());
+                
+                // 計算天、時、分
+                const days = Math.floor(timeDiffMs / (24 * 60 * 60 * 1000));
+                const hours = Math.floor((timeDiffMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                const minutes = Math.floor((timeDiffMs % (60 * 60 * 1000)) / (60 * 1000));
+                
+                timeDiffText = `${days}天${hours}時${minutes}分`;
+                
+                console.log('最終時間計算結果:', {
+                    '時間差(毫秒)': timeDiffMs,
+                    '天': days,
+                    '時': hours,
+                    '分': minutes,
+                    '最終格式': timeDiffText
+                });
+                
+            } catch (error) {
+                console.error('時間差計算錯誤:', error);
+                timeDiffText = '計算錯誤';
             }
+            
+            // 判斷方向（從第一點到第二點）
+            let direction, directionSymbol;
+            if (priceChange > 0) {
+                direction = '上漲';
+                directionSymbol = '📈';
+            } else if (priceChange < 0) {
+                direction = '下跌';  
+                directionSymbol = '📉';
+            } else {
+                direction = '持平';
+                directionSymbol = '⚊';
+            }
+            
+            console.log('方向計算調試:', {
+                '價格變化值': priceChange,
+                '方向': direction,
+                '符號': directionSymbol
+            });
+            
+            console.log('測量結果總結:', {
+                價格差: priceDiff.toFixed(2),
+                價格變化率: `${priceChangePercent}%`,
+                時間差: timeDiffText,
+                方向: `${directionSymbol} ${direction}`,
+                原始價格變化: priceChange
+            });
+            
+            // 顯示測量結果在懸浮視窗中
+            this.showMeasurementPopup(priceDiff, priceChangePercent, timeDiffText, direction, directionSymbol);
+        }
+        
+        getTimeframeMultiplier() {
+            // 根據當前時間週期返回毫秒倍數
+            const multipliers = {
+                'M1': 60 * 1000,           // 1分鐘
+                'M5': 5 * 60 * 1000,       // 5分鐘
+                'M15': 15 * 60 * 1000,     // 15分鐘
+                'M30': 30 * 60 * 1000,     // 30分鐘
+                'H1': 60 * 60 * 1000,      // 1小時
+                'H4': 4 * 60 * 60 * 1000,  // 4小時
+                'D1': 24 * 60 * 60 * 1000, // 1天
+                'W1': 7 * 24 * 60 * 60 * 1000, // 1週
+                'MN': 30 * 24 * 60 * 60 * 1000 // 1月
+            };
+            return multipliers[this.currentTimeframe] || 24 * 60 * 60 * 1000; // 默認1天
+        }
+        
+        showMeasurementPopup(priceDiff, priceChangePercent, timeDiffText, direction, directionSymbol) {
+            // 更新懸浮視窗內容
+            document.getElementById('measurement-price-diff').textContent = priceDiff.toFixed(2);
+            
+            // 確保百分比正確顯示正負號
+            const percentageText = parseFloat(priceChangePercent) >= 0 ? `+${priceChangePercent}%` : `${priceChangePercent}%`;
+            document.getElementById('measurement-change-percent').textContent = percentageText;
+            
+            document.getElementById('measurement-time-diff').textContent = timeDiffText;
+            document.getElementById('measurement-direction').textContent = `${directionSymbol} ${direction}`;
+            
+            console.log('懸浮視窗顯示內容:', {
+                '價格差': priceDiff.toFixed(2),
+                '變化率顯示': percentageText,
+                '時間差': timeDiffText,
+                '方向顯示': `${directionSymbol} ${direction}`
+            });
+            
+            // 顯示懸浮視窗
+            const popup = document.getElementById('measurement-popup');
+            popup.style.display = 'block';
+            
+            // 設置全局變數供按鈕使用
+            window.currentMeasurementChart = this;
         }
         
         // 實用的縮放方法 - 時間軸縮放 + 自動價格軸調整
@@ -724,6 +989,23 @@
             }
         }
         
+        addConnectionLine() {
+            if (this.measurementPoints.length !== 2) return;
+            
+            const [point1, point2] = this.measurementPoints;
+            
+            // 創建連接線數據
+            const lineData = [
+                { time: point1.time, value: point1.price },
+                { time: point2.time, value: point2.price }
+            ];
+            
+            // 設置連接線數據
+            this.measurementLineSeries.setData(lineData);
+            
+            console.log('連接線已添加');
+        }
+        
         clearMeasurementLines() {
             // 清除測量標記
             try {
@@ -731,9 +1013,15 @@
             } catch (e) {
                 console.warn('清除測量標記時出錯:', e);
             }
+            
+            // 清除連接線
+            if (this.measurementLineSeries) {
+                this.measurementLineSeries.setData([]);
+            }
+            
             this.measurementLines = [];
             this.measurementPoints = [];
-            console.log('測量標記已清除');
+            console.log('測量標記和連接線已清除');
         }
         
         toggleFullscreen() {
@@ -812,28 +1100,33 @@
         console.error('TradingView Lightweight Charts 庫未載入！');
     } else {
         console.log('TradingView Lightweight Charts 庫已就緒');
-    }    // 測量按鈕測試 - 立即執行
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('=== 測量按鈕測試開始 ===');
-        setTimeout(() => {
-            const measureBtn = document.getElementById('measure');
-            console.log('直接查找測量按鈕:', measureBtn);
-            console.log('按鈕是否存在:', !!measureBtn);
-            
-            if (measureBtn) {
-                console.log('按鈕文本:', measureBtn.textContent);
-                console.log('按鈕標題:', measureBtn.title);
-                
-                // 添加測試點擊事件
-                measureBtn.addEventListener('click', () => {
-                    console.log('🎯 測量按鈕測試點擊成功！');
-                    alert('測量按鈕測試成功！');
-                });
-                
-                console.log('測試事件監聽器已添加');
-            } else {
-                console.error('❌ 測量按鈕未找到！');
+    }
+    
+    // 懸浮視窗控制函數
+    function closeMeasurementPopup() {
+        const popup = document.getElementById('measurement-popup');
+        popup.style.display = 'none';
+    }
+    
+    function clearMeasurementAndClose() {
+        if (window.currentMeasurementChart) {
+            window.currentMeasurementChart.clearMeasurementLines();
+            // 關閉測量模式
+            const button = document.getElementById('measure');
+            if (button && button.classList.contains('active')) {
+                button.classList.remove('active');
+                window.currentMeasurementChart.measurementMode = false;
             }
-        }, 500);
-    });
+        }
+        closeMeasurementPopup();
+    }
+    
+    function keepMeasurementAndClose() {
+        // 只關閉懸浮視窗，保留測量線
+        closeMeasurementPopup();
+    }
+    
+
+    
+
 
