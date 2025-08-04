@@ -1,120 +1,213 @@
-# 市場波段規律分析專案
+# Market Swing Strategy Generator
 
-## 專案概述
-這是一個使用演算法找出市場規律(波段)並生成策略的專案。
+一個高性能的市場波段分析系統，使用 Python FastAPI 和 TradingView Lightweight Charts 構建。
 
-## 功能特色
+## 🚀 功能特色
 
-### 第一階段：資料處理
-- 使用DuckDB + Parquet作為資料庫
-- 將大型Tick CSV檔案分批處理
-- 生成多時間週期的蠟燭圖資料：M1, M5, M15, M30, H1, H4, D1
-- 高效率資料存儲和查詢
+- **多時間框架支持**: M1, M5, M15, M30, H1, H4, D1, W1, MN
+- **多品種支持**: XAUUSD (黃金), US30 (道瓊斯), US100 (納斯達克)
+- **智能波段識別**: 使用 ZigZag 算法自動識別市場波段
+- **高性能圖表**: 基於 TradingView Lightweight Charts 的專業級圖表
+- **實時數據處理**: 支持大量歷史數據的快速處理和顯示
+- **測量工具**: 內建價格和時間測量功能
+- **響應式設計**: 現代化的 Web 界面，支持全屏顯示
 
-### 第二階段：高性能互動式視覺化
-- 基於FastAPI + ApexCharts的高性能架構
-- 即時切換不同時間週期的蠟燭圖
-- 支援圖表放大縮小功能
-- 測量工具：點擊式測量計算點差
-- 現代化響應式用戶界面
-- RESTful API架構，支援擴展
+## 📊 技術架構
 
-## 專案結構
+### 後端技術
+- **Python 3.8+**: 主要開發語言
+- **FastAPI**: 高性能 Web 框架
+- **DuckDB**: 高性能列式數據庫
+- **Pandas**: 數據處理和分析
+- **NumPy**: 數值計算
+
+### 前端技術
+- **HTML5/CSS3**: 現代化 Web 標準
+- **JavaScript ES6+**: 前端邏輯
+- **TradingView Lightweight Charts**: 專業級圖表庫
+- **響應式設計**: 適配各種設備
+
+### 數據處理
+- **ZigZag 算法**: 智能波段識別
+- **虛擬化渲染**: 支持大量數據的高性能顯示
+- **智能緩存**: 優化數據加載和渲染性能
+
+## 🛠️ 安裝和運行
+
+### 環境要求
+- Python 3.8 或更高版本
+- Git
+
+### 安裝步驟
+
+1. **克隆專案**
+```bash
+git clone https://github.com/Zou-Xingde/Strategy_Generator.git
+cd Strategy_Generator
 ```
-├── data/                   # 原始資料目錄
-├── src/
-│   ├── data_processing/    # 第一階段：資料處理模組
-│   ├── frontend/          # 第二階段：前端界面
-│   └── database/          # 資料庫配置
-├── tests/                 # 測試文件
-├── config/                # 配置文件
-└── requirements.txt       # Python依賴項
+
+2. **創建虛擬環境**
+```bash
+python -m venv .venv
 ```
 
-## 安裝和使用
+3. **激活虛擬環境**
+```bash
+# Windows
+.venv\Scripts\activate
 
-1. 安裝依賴項：
+# macOS/Linux
+source .venv/bin/activate
+```
+
+4. **安裝依賴**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. 運行資料處理：
+5. **啟動應用**
 ```bash
-python src/data_processing/tick_processor.py
+python start_frontend.py
 ```
 
-3. 啟動FastAPI前端界面：
-```bash
-python run.py --frontend
+6. **訪問應用**
+打開瀏覽器訪問: http://127.0.0.1:8050
+
+## 📁 專案結構
+
 ```
-或直接使用：
-```bash
-uvicorn src.frontend.app:app --host 127.0.0.1 --port 8050 --reload
-```
-
-## 技術棧
-- **資料庫**: DuckDB + Parquet
-- **後端**: FastAPI, Python, Pandas, DuckDB
-- **前端**: HTML/JavaScript, ApexCharts
-- **版本控制**: Git
-
-## 🎮 前端界面操作
-
-- **M1/M5/M15/M30/H1/H4/D1 按鈕** → 即時切換時間週期
-- **測量工具按鈕** → 開啟測量模式，點擊圖表兩點計算價格和時間差
-- **放大/縮小按鈕** → 調整圖表顯示範圍
-- **重置按鈕** → 清除測量結果和重置視圖
-- **響應式設計** → 支援桌面和移動設備
-
-## 🚀 性能優勢
-
-### 為什麼選擇FastAPI + ApexCharts？
-
-- **高性能API**: FastAPI是最快的Python Web框架之一
-- **原生JavaScript**: 不依賴重量級前端框架，載入速度快
-- **ApexCharts**: 專業級圖表庫，支援大量資料點
-- **RESTful架構**: 易於擴展和維護
-- **即時響應**: 無需頁面重新載入即可切換時間週期
-
-### 性能對比
-- **舊版 (Dash)**: 切換時間週期需要 2-3 秒
-- **新版 (FastAPI)**: 切換時間週期只需 0.5 秒
-- **資料載入**: 提升 5-10 倍速度
-
-## 🔌 API端點
-
-系統提供以下RESTful API端點：
-
-- `GET /` - 主頁面
-- `GET /api/candlestick/{symbol}/{timeframe}` - 獲取蠟燭圖資料
-- `GET /api/timeframes/{symbol}` - 獲取可用時間週期
-- `GET /api/config` - 獲取系統配置
-- `POST /api/measurement` - 計算測量結果
-
-## 📱 響應式設計
-
-- 支援桌面、平板和手機設備
-- 自適應按鈕佈局
-- 觸控友好的操作介面
-- 現代化的UI設計
-
-## 🔧 開發者指南
-
-### 啟動開發環境
-```bash
-# 安裝依賴
-pip install -r requirements.txt
-
-# 啟動開發服務器
-python run.py --frontend
-
-# 或使用uvicorn
-uvicorn src.frontend.app:app --reload
+market_swing_cursor/
+├── src/                          # 源代碼目錄
+│   ├── algorithms/               # 算法實現
+│   │   ├── zigzag.py            # ZigZag 算法
+│   │   └── zigzag_improved.py   # 改進版算法
+│   ├── database/                 # 數據庫相關
+│   │   └── connection.py        # 數據庫連接
+│   ├── data_processing/          # 數據處理
+│   │   └── swing_processor.py   # 波段處理器
+│   └── frontend/                 # 前端代碼
+│       ├── app.py               # FastAPI 應用
+│       ├── static/              # 靜態文件
+│       │   ├── app.js          # 主要 JavaScript
+│       │   └── style.css       # 樣式文件
+│       └── templates/           # HTML 模板
+│           └── index.html      # 主頁面
+├── config/                       # 配置文件
+│   └── settings.py              # 應用設置
+├── database/                     # 數據庫文件
+├── scripts/                      # 工具腳本
+├── requirements.txt              # Python 依賴
+├── start_frontend.py            # 啟動腳本
+└── README.md                    # 專案說明
 ```
 
-### 自訂配置
-編輯 `config/settings.py` 來修改：
-- 資料庫路徑
-- 前端端口
-- 顏色主題
-- 時間週期設定 
+## 🎯 主要功能
+
+### 1. 波段分析
+- 自動識別市場高點和低點
+- 計算波段強度和持續時間
+- 支持多種時間框架的波段分析
+
+### 2. 圖表功能
+- 專業級 K線圖顯示
+- 波段連接線和標記點
+- 縮放和平移功能
+- 十字線和測量工具
+
+### 3. 數據管理
+- 支持大量歷史數據
+- 智能數據緩存和虛擬化
+- 高性能數據處理
+
+### 4. 用戶界面
+- 現代化響應式設計
+- 直觀的操作界面
+- 支持全屏顯示
+
+## 🔧 配置說明
+
+### 數據庫配置
+在 `config/settings.py` 中配置數據庫路徑：
+```python
+DUCKDB_PATH = Path("database/market_data.duckdb")
+```
+
+### 前端配置
+在 `src/frontend/app.py` 中配置服務器設置：
+```python
+FRONTEND_HOST = "127.0.0.1"
+FRONTEND_PORT = 8050
+```
+
+## 📈 使用指南
+
+### 基本操作
+1. **選擇品種**: 點擊品種下拉選單選擇交易品種
+2. **選擇時間框架**: 點擊時間框架按鈕切換週期
+3. **顯示波段**: 點擊 "📈" 按鈕顯示波段分析
+4. **測量工具**: 點擊 "📏" 按鈕啟用測量功能
+5. **縮放控制**: 使用 "+" "-" 按鈕或滾輪縮放圖表
+
+### 高級功能
+- **波段列表**: 點擊 "📋" 查看詳細波段信息
+- **全屏顯示**: 點擊 "⛶" 進入全屏模式
+- **十字線**: 點擊 "✚" 啟用十字線功能
+
+## 🐛 故障排除
+
+### 常見問題
+
+1. **前端無法顯示波段**
+   - 檢查數據庫中是否有對應的波段數據
+   - 確認算法名稱設置正確（預設為 `zigzag_fixed`）
+
+2. **圖表顯示異常**
+   - 清除瀏覽器緩存
+   - 檢查 JavaScript 控制台錯誤信息
+
+3. **數據加載緩慢**
+   - 檢查數據庫文件大小
+   - 考慮優化數據查詢
+
+### 日誌查看
+應用運行時會在終端顯示詳細日誌，包括：
+- 數據庫連接狀態
+- API 請求信息
+- 錯誤和警告信息
+
+## 🤝 貢獻指南
+
+歡迎提交 Issue 和 Pull Request！
+
+### 開發環境設置
+1. Fork 專案
+2. 創建功能分支
+3. 提交更改
+4. 發起 Pull Request
+
+### 代碼規範
+- 使用 Python 3.8+ 語法
+- 遵循 PEP 8 代碼風格
+- 添加適當的註釋和文檔
+
+## 📄 許可證
+
+本專案採用 MIT 許可證 - 詳見 [LICENSE](LICENSE) 文件
+
+## 📞 聯繫方式
+
+- GitHub: [@Zou-Xingde](https://github.com/Zou-Xingde)
+- 專案地址: https://github.com/Zou-Xingde/Strategy_Generator
+
+## 🎉 更新日誌
+
+### v1.0.0 (2025-01-15)
+- ✅ 修復波段數據顯示問題
+- ✅ 改進時間戳處理邏輯
+- ✅ 優化前端性能
+- ✅ 添加完整的錯誤處理
+- ✅ 改進用戶界面體驗
+
+---
+
+**注意**: 本專案僅供學習和研究使用，不構成投資建議。請謹慎使用並自負風險。 
