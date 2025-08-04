@@ -4,13 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Market Swing - 市場波段規律分析系統</title>
-    <link rel="stylesheet" href="/static/style.css?v=1.9">
+    <link rel="stylesheet" href="/static/style.css?v=2.0">
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="market-swing-theme">
     <!-- 主工具欄 -->
     <div class="main-toolbar">
         <div class="toolbar-section">
+            <!-- 品種選擇下拉選單 -->
+            <div class="symbol-selector">
+                <button class="symbol-btn" id="symbol-dropdown">
+                    <span id="current-symbol">XAUUSD</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="symbol-dropdown" id="symbol-dropdown-menu">
+                    <div class="symbol-option" data-symbol="XAUUSD">XAUUSD (黃金)</div>
+                    <div class="symbol-option" data-symbol="US30">US30 (道瓊斯)</div>
+                    <div class="symbol-option" data-symbol="US100">US100 (納斯達克)</div>
+                </div>
+            </div>
+            
+            <div class="separator"></div>
+            
             <div class="timeframe-buttons">
                 <button class="tf-btn" data-timeframe="M1">M1</button>
                 <button class="tf-btn" data-timeframe="M5">M5</button>
@@ -25,6 +40,28 @@
         </div>
         
         <div class="toolbar-section">
+            <!-- 演算法選擇下拉選單 -->
+            <div class="algorithm-selector">
+                <button class="algorithm-btn" id="algorithm-dropdown">
+                    <span id="current-algorithm">ZigZag</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="algorithm-dropdown" id="algorithm-dropdown-menu">
+                    <div class="algorithm-option" data-algorithm="zigzag_fixed">ZigZag 演算法</div>
+                    <div class="algorithm-option" data-algorithm="fractal">Fractal 演算法</div>
+                    <div class="algorithm-option" data-algorithm="pivot">Pivot 演算法</div>
+                </div>
+            </div>
+            
+            <div class="separator"></div>
+            
+            <button class="tool-btn" id="show-swing" title="顯示波段">📈</button>
+            <button class="tool-btn" id="clear-swing" title="清除波段">🗑️</button>
+            <button class="tool-btn" id="swing-list" title="波段列表">📋</button>
+
+            
+            <div class="separator"></div>
+            
             <button class="tool-btn" id="zoom-in" title="放大">+</button>
             <button class="tool-btn" id="zoom-out" title="縮小">-</button>
             <button class="tool-btn" id="zoom-reset" title="重置縮放">🔄</button>
@@ -87,6 +124,29 @@
         </div>
     </div>
 
+    <!-- 波段列表懸浮視窗 -->
+    <div id="swing-list-popup" class="swing-list-popup" style="display: none;">
+        <div class="swing-list-header">
+            <span class="swing-list-title">📋 波段列表</span>
+            <button class="swing-list-close" onclick="closeSwingListPopup()">×</button>
+        </div>
+        <div class="swing-list-content">
+            <div class="swing-list-table">
+                <div class="swing-list-row swing-list-header-row">
+                    <div class="swing-list-cell">開始時間</div>
+                    <div class="swing-list-cell">開始價格</div>
+                    <div class="swing-list-cell">結束時間</div>
+                    <div class="swing-list-cell">結束價格</div>
+                    <div class="swing-list-cell">價差</div>
+                    <div class="swing-list-cell">時差</div>
+                </div>
+                <div id="swing-list-body">
+                    <!-- 波段列表內容將在這裡動態生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 底部狀態欄 -->
     <div class="status-bar">
         <div class="status-left">
@@ -101,7 +161,7 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=2.4"></script>
+    <script src="/static/app.js?v=4.5"></script>
 </body>
 </html>
     

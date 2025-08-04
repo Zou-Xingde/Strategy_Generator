@@ -133,15 +133,17 @@ class DuckDBConnection:
     
     def get_candlestick_data(self, symbol: str, timeframe: str, 
                            start_date: Optional[str] = None, 
-                           end_date: Optional[str] = None) -> pd.DataFrame:
+                           end_date: Optional[str] = None,
+                           limit: Optional[int] = None) -> pd.DataFrame:
         """取得蠟燭圖資料"""
         if not self.conn:
             raise RuntimeError("Database connection not established")
             
         try:
+            # 使用 v_candlestick_latest 視圖來獲取最新版本的資料
             query = """
                 SELECT timestamp, open, high, low, close, volume
-                FROM candlestick_data
+                FROM v_candlestick_latest
                 WHERE symbol = ? AND timeframe = ?
             """
             params = [symbol, timeframe]
@@ -154,16 +156,61 @@ class DuckDBConnection:
                 query += " AND timestamp <= ?"
                 params.append(end_date)
             
-            query += " ORDER BY timestamp"
+            query += " ORDER BY timestamp DESC"  # 改為 DESC 以獲取最新資料
+            
+            # 添加 LIMIT 來限制返回資料量
+            if limit:
+                query += f" LIMIT {limit}"
+            else:
+                # 預設限制為 1000 筆，避免載入過多資料
+                query += " LIMIT 1000"
             
             df = self.conn.execute(query, params).fetchdf()
-            df.set_index('timestamp', inplace=True)
+            
+            if not df.empty:
+                df.set_index('timestamp', inplace=True)
+                # 重新排序為升序，以便正確顯示
+                df = df.sort_index()
             
             return df
             
         except Exception as e:
             logger.error(f"Failed to get candlestick data: {e}")
-            raise
+            # 如果視圖不存在，嘗試使用舊表
+            try:
+                query = """
+                    SELECT timestamp, open, high, low, close, volume
+                    FROM candlestick_data
+                    WHERE symbol = ? AND timeframe = ?
+                """
+                params = [symbol, timeframe]
+                
+                if start_date:
+                    query += " AND timestamp >= ?"
+                    params.append(start_date)
+                
+                if end_date:
+                    query += " AND timestamp <= ?"
+                    params.append(end_date)
+                
+                query += " ORDER BY timestamp DESC"  # 改為 DESC
+                
+                # 添加 LIMIT
+                if limit:
+                    query += f" LIMIT {limit}"
+                else:
+                    query += " LIMIT 1000"
+                
+                df = self.conn.execute(query, params).fetchdf()
+                
+                if not df.empty:
+                    df.set_index('timestamp', inplace=True)
+                    df = df.sort_index()
+                
+                return df
+            except Exception as e2:
+                logger.error(f"Failed to get candlestick data from old table: {e2}")
+                raise
     
     def get_available_timeframes(self, symbol: str) -> List[str]:
         """取得可用的時間週期"""
@@ -171,9 +218,10 @@ class DuckDBConnection:
             raise RuntimeError("Database connection not established")
             
         try:
+            # 使用 v_candlestick_latest 視圖
             query = """
                 SELECT DISTINCT timeframe
-                FROM candlestick_data
+                FROM v_candlestick_latest
                 WHERE symbol = ?
                 ORDER BY timeframe
             """
@@ -182,7 +230,19 @@ class DuckDBConnection:
             
         except Exception as e:
             logger.error(f"Failed to get available timeframes: {e}")
-            raise
+            # 如果視圖不存在，嘗試使用舊表
+            try:
+                query = """
+                    SELECT DISTINCT timeframe
+                    FROM candlestick_data
+                    WHERE symbol = ?
+                    ORDER BY timeframe
+                """
+                result = self.conn.execute(query, [symbol]).fetchall()
+                return [row[0] for row in result]
+            except Exception as e2:
+                logger.error(f"Failed to get available timeframes from old table: {e2}")
+                raise
     
     def close(self):
         """關閉資料庫連接"""

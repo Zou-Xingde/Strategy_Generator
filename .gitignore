@@ -21,61 +21,7 @@ wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# Virtual Environment
 .env
 .venv
 env/
@@ -83,6 +29,101 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Database
+*.duckdb
+*.duckdb.wal
+*.duckdb-shm
+*.duckdb-wal
+database/*.duckdb
+database/*.duckdb.wal
+database/*.duckdb-shm
+database/*.duckdb-wal
+
+# Data files
+data/
+*.csv
+*.json
+*.xlsx
+*.xls
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node.js (for frontend-nextjs)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next/
+out/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Backup files
+*.bak
+*.backup
+backup/
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Documentation
+docs/_build/
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
 
 # Spyder project settings
 .spyderproject
@@ -99,21 +140,8 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
-# 專案特定
-/data/
-/database/
-*.duckdb
-*.parquet
-*.csv
-*.log
+# Pyre type checker
+.pyre/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db 
+# SpecStory (AI conversation history)
+.specstory/ 

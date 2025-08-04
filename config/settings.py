@@ -15,7 +15,10 @@ DATABASE_DIR = ROOT_DIR / "database"
 DUCKDB_PATH = DATABASE_DIR / "market_data.duckdb"
 
 # 原始Tick資料路徑
-TICK_CSV_PATH = r"C:\Users\USER\Desktop\策略產生器\data\EXUSA30IDXUSD-TICK-No Session.csv"
+TICK_CSV_PATH = r"D:\project\策略產生器\data\EXUSA30IDXUSD-TICK-No Session.csv"
+
+# D1資料路徑
+D1_CSV_PATH = r"D:\project\策略產生器\data\EX_D1USA30IDXUSD-D1-No Session.csv"
 
 # 時間週期設定
 TIMEFRAMES = {

@@ -39,18 +39,29 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 templates = Jinja2Templates(directory=str(templates_dir))
 
 # 全局變數
-current_symbol = "EXUSA30IDXUSD"
+current_symbol = "XAUUSD"  # 預設為 XAUUSD
 
 class CandlestickData:
     """蠟燭圖資料類別"""
     
     @staticmethod
     def get_data(symbol: str, timeframe: str, start_date: Optional[str] = None, 
-                 end_date: Optional[str] = None) -> Dict:
+                 end_date: Optional[str] = None, limit: Optional[int] = None) -> Dict:
         """獲取蠟燭圖資料"""
         try:
             with DuckDBConnection(str(DUCKDB_PATH)) as db:
-                df = db.get_candlestick_data(symbol, timeframe, start_date, end_date)
+                # 根據時間框架設定不同的預設限制
+                if limit is None:
+                    if timeframe in ['M1', 'M5']:
+                        limit = 500  # 短時間框架限制更多資料
+                    elif timeframe in ['M15', 'M30']:
+                        limit = 300
+                    elif timeframe in ['H1', 'H4']:
+                        limit = 200
+                    else:  # D1
+                        limit = 100  # 日線限制較少資料
+                
+                df = db.get_candlestick_data(symbol, timeframe, start_date, end_date, limit)
                 
                 if df.empty:
                     return {"data": [], "message": "暫無資料"}
@@ -71,7 +82,68 @@ class CandlestickData:
                     "data": data,
                     "symbol": symbol,
                     "timeframe": timeframe,
-                    "count": len(data)
+                    "count": len(data),
+                    "limit": limit
+                }
+                
+        except Exception as e:
+            return {"error": str(e), "data": []}
+
+    @staticmethod
+    def get_smart_data(symbol: str, timeframe: str, days: int = 30) -> Dict:
+        """智能獲取資料 - 根據天數動態調整資料量"""
+        try:
+            with DuckDBConnection(str(DUCKDB_PATH)) as db:
+                # 計算開始日期
+                from datetime import datetime, timedelta
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=days)
+                
+                # 根據天數和時間框架計算合適的限制
+                if timeframe == 'D1':
+                    limit = min(days + 10, 200)  # 日線最多200筆
+                elif timeframe == 'H4':
+                    limit = min(days * 6 + 20, 500)  # 4小時線
+                elif timeframe == 'H1':
+                    limit = min(days * 24 + 50, 1000)  # 1小時線
+                elif timeframe == 'M30':
+                    limit = min(days * 48 + 100, 1500)  # 30分鐘線
+                elif timeframe == 'M15':
+                    limit = min(days * 96 + 200, 2000)  # 15分鐘線
+                elif timeframe == 'M5':
+                    limit = min(days * 288 + 500, 3000)  # 5分鐘線
+                else:  # M1
+                    limit = min(days * 1440 + 1000, 5000)  # 1分鐘線
+                
+                df = db.get_candlestick_data(
+                    symbol, timeframe, 
+                    start_date.strftime('%Y-%m-%d'), 
+                    end_date.strftime('%Y-%m-%d'), 
+                    limit
+                )
+                
+                if df.empty:
+                    return {"data": [], "message": "暫無資料"}
+                
+                # 轉換為前端所需格式
+                data = []
+                for timestamp, row in df.iterrows():
+                    data.append({
+                        "timestamp": timestamp.isoformat(),
+                        "open": float(row['open']),
+                        "high": float(row['high']),
+                        "low": float(row['low']),
+                        "close": float(row['close']),
+                        "volume": int(row['volume'])
+                    })
+                
+                return {
+                    "data": data,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "count": len(data),
+                    "limit": limit,
+                    "days": days
                 }
                 
         except Exception as e:
@@ -89,14 +161,36 @@ async def get_candlestick_data(
     symbol: str, 
     timeframe: str,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None
 ):
     """獲取蠟燭圖資料API"""
     
     if timeframe not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="不支援的時間週期")
     
-    data = CandlestickData.get_data(symbol, timeframe, start_date, end_date)
+    data = CandlestickData.get_data(symbol, timeframe, start_date, end_date, limit)
+    
+    if "error" in data:
+        raise HTTPException(status_code=500, detail=data["error"])
+    
+    return data
+
+@app.get("/api/candlestick/{symbol}/{timeframe}/smart")
+async def get_smart_candlestick_data(
+    symbol: str, 
+    timeframe: str,
+    days: int = 30
+):
+    """智能獲取蠟燭圖資料API - 根據天數動態調整資料量"""
+    
+    if timeframe not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="不支援的時間週期")
+    
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="天數必須在 1-365 之間")
+    
+    data = CandlestickData.get_smart_data(symbol, timeframe, days)
     
     if "error" in data:
         raise HTTPException(status_code=500, detail=data["error"])
@@ -149,6 +243,138 @@ async def calculate_measurement(data: Dict):
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/swing/{symbol}/{timeframe}")
+async def get_swing_data(
+    symbol: str, 
+    timeframe: str,
+    algorithm: str = "zigzag",
+    limit: Optional[int] = None
+):
+    """獲取波段資料"""
+    try:
+        with DuckDBConnection(str(DUCKDB_PATH)) as db:
+            # 設定預設限制
+            if limit is None:
+                if timeframe in ['M1', 'M5']:
+                    limit = 50
+                elif timeframe in ['M15', 'M30']:
+                    limit = 30
+                elif timeframe in ['H1', 'H4']:
+                    limit = 20
+                else:  # D1
+                    limit = 15
+            
+            # 查詢波段資料
+            query = f"""
+            SELECT id, symbol, timeframe, algorithm_name, version_hash,
+                   timestamp, zigzag_price, zigzag_type, zigzag_strength,
+                   zigzag_swing, swing_high, swing_low, swing_range,
+                   swing_duration, swing_direction, created_at
+            FROM swing_data 
+            WHERE symbol = '{symbol}' 
+              AND timeframe = '{timeframe}'
+              AND algorithm_name = '{algorithm}'
+            ORDER BY timestamp DESC
+            LIMIT {limit}
+            """
+            
+            df = db.conn.execute(query).fetchdf()
+            
+            if df.empty:
+                return {"data": [], "message": "暫無波段資料"}
+            
+            # 轉換為前端所需格式
+            data = []
+            for _, row in df.iterrows():
+                data.append({
+                    "id": int(row['id']),
+                    "symbol": row['symbol'],
+                    "timeframe": row['timeframe'],
+                    "algorithm_name": row['algorithm_name'],
+                    "version_hash": row['version_hash'],
+                    "timestamp": row['timestamp'].isoformat() if pd.notna(row['timestamp']) else None,
+                    "zigzag_price": float(row['zigzag_price']) if pd.notna(row['zigzag_price']) else None,
+                    "zigzag_type": row['zigzag_type'],
+                    "zigzag_strength": float(row['zigzag_strength']) if pd.notna(row['zigzag_strength']) else None,
+                    "zigzag_swing": int(row['zigzag_swing']) if pd.notna(row['zigzag_swing']) else None,
+                    "swing_high": float(row['swing_high']) if pd.notna(row['swing_high']) else None,
+                    "swing_low": float(row['swing_low']) if pd.notna(row['swing_low']) else None,
+                    "swing_range": float(row['swing_range']) if pd.notna(row['swing_range']) else None,
+                    "swing_duration": int(row['swing_duration']) if pd.notna(row['swing_duration']) else None,
+                    "swing_direction": row['swing_direction'],
+                    "created_at": row['created_at'].isoformat() if pd.notna(row['created_at']) else None
+                })
+            
+            return {
+                "data": data,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "algorithm": algorithm,
+                "count": len(data),
+                "limit": limit
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/swing/{symbol}/{timeframe}/statistics")
+async def get_swing_statistics(
+    symbol: str, 
+    timeframe: str,
+    algorithm: str = "zigzag"
+):
+    """獲取波段統計資訊"""
+    try:
+        with DuckDBConnection(str(DUCKDB_PATH)) as db:
+            # 查詢統計資訊
+            query = f"""
+            SELECT 
+                COUNT(*) as total_swings,
+                AVG(zigzag_strength) as avg_strength,
+                MAX(zigzag_strength) as max_strength,
+                MIN(zigzag_strength) as min_strength,
+                AVG(swing_range) as avg_range,
+                MAX(swing_range) as max_range,
+                MIN(swing_range) as min_range,
+                AVG(swing_duration) as avg_duration,
+                MAX(swing_duration) as max_duration,
+                MIN(swing_duration) as min_duration,
+                COUNT(CASE WHEN zigzag_type = 'high' THEN 1 END) as high_points,
+                COUNT(CASE WHEN zigzag_type = 'low' THEN 1 END) as low_points
+            FROM swing_data 
+            WHERE symbol = '{symbol}' 
+              AND timeframe = '{timeframe}'
+              AND algorithm_name = '{algorithm}'
+            """
+            
+            result = db.conn.execute(query).fetchone()
+            
+            if not result:
+                return {"message": "暫無統計資料"}
+            
+            return {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "algorithm": algorithm,
+                "statistics": {
+                    "total_swings": int(result[0]) if result[0] else 0,
+                    "avg_strength": float(result[1]) if result[1] else 0,
+                    "max_strength": float(result[2]) if result[2] else 0,
+                    "min_strength": float(result[3]) if result[3] else 0,
+                    "avg_range": float(result[4]) if result[4] else 0,
+                    "max_range": float(result[5]) if result[5] else 0,
+                    "min_range": float(result[6]) if result[6] else 0,
+                    "avg_duration": float(result[7]) if result[7] else 0,
+                    "max_duration": int(result[8]) if result[8] else 0,
+                    "min_duration": int(result[9]) if result[9] else 0,
+                    "high_points": int(result[10]) if result[10] else 0,
+                    "low_points": int(result[11]) if result[11] else 0
+                }
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 def create_static_files():
     """創建靜態文件"""
