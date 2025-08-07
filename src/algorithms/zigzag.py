@@ -327,8 +327,17 @@ class ZigZagAlgorithm(BaseAlgorithm):
         zigzag_data = df[zigzag_mask]
         
         for idx, row in zigzag_data.iterrows():
+            # 確保timestamp是正確的時間戳格式
+            timestamp = idx
+            if isinstance(timestamp, (int, float)) and timestamp < 1000000:  # 可能是數字索引
+                # 如果是數字索引，嘗試從DataFrame的索引獲取對應的時間戳
+                if timestamp < len(df):
+                    timestamp = df.index[timestamp]
+                else:
+                    continue  # 跳過無效的索引
+            
             swing_points.append({
-                'timestamp': idx,
+                'timestamp': timestamp,
                 'price': row['zigzag_price'],
                 'type': row['zigzag_type'],
                 'strength': row['zigzag_strength'],

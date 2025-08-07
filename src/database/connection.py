@@ -60,6 +60,53 @@ class DuckDBConnection:
                 )
             """)
             
+            # 創建波段資料表
+            self.conn.execute("""
+                CREATE SEQUENCE IF NOT EXISTS swing_data_seq START 1
+            """)
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS swing_data (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('swing_data_seq'),
+                    symbol VARCHAR,
+                    timeframe VARCHAR,
+                    algorithm_name VARCHAR,
+                    version_hash VARCHAR,
+                    timestamp TIMESTAMP,
+                    zigzag_price DECIMAL(10,5),
+                    zigzag_type VARCHAR,
+                    zigzag_strength DECIMAL(10,5),
+                    zigzag_swing INTEGER,
+                    swing_high DECIMAL(10,5),
+                    swing_low DECIMAL(10,5),
+                    swing_range DECIMAL(10,5),
+                    swing_duration INTEGER,
+                    swing_direction VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # 創建演算法統計表
+            self.conn.execute("""
+                CREATE SEQUENCE IF NOT EXISTS algorithm_statistics_seq START 1
+            """)
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS algorithm_statistics (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('algorithm_statistics_seq'),
+                    symbol VARCHAR,
+                    timeframe VARCHAR,
+                    algorithm_name VARCHAR,
+                    version_hash VARCHAR,
+                    total_swings INTEGER,
+                    avg_swing_range DECIMAL(10,5),
+                    avg_swing_duration DECIMAL(10,5),
+                    max_swing_range DECIMAL(10,5),
+                    min_swing_range DECIMAL(10,5),
+                    swing_ranges JSON,
+                    swing_durations JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # 創建索引以提高查詢效率
             self.conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_candlestick_symbol_timeframe_timestamp 
@@ -69,6 +116,11 @@ class DuckDBConnection:
             self.conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_tick_symbol_timestamp 
                 ON tick_data(symbol, timestamp)
+            """)
+            
+            self.conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_swing_symbol_timeframe_algorithm 
+                ON swing_data(symbol, timeframe, algorithm_name)
             """)
             
             logger.info("Database setup completed successfully")
@@ -243,6 +295,169 @@ class DuckDBConnection:
             except Exception as e2:
                 logger.error(f"Failed to get available timeframes from old table: {e2}")
                 raise
+    
+    def insert_swing_data(self, df: pd.DataFrame, symbol: str, timeframe: str, 
+                         algorithm_name: str, algorithm_parameters: Dict, 
+                         version_name: Optional[str] = None, description: str = ""):
+        """插入波段資料並返回版本hash"""
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+            
+        try:
+            import hashlib
+            import json
+            
+            # 生成版本hash
+            param_str = json.dumps(algorithm_parameters, sort_keys=True)
+            version_hash = hashlib.md5(f"{algorithm_name}_{param_str}".encode()).hexdigest()[:8]
+            
+            # 準備資料
+            swing_df = df[df['zigzag_price'].notna()].copy()
+            if swing_df.empty:
+                logger.warning(f"No swing data to insert for {symbol} {timeframe}")
+                return version_hash
+            
+            # 重置索引，使timestamp成為一個欄位
+            swing_df = swing_df.reset_index()
+            
+            # 添加必要欄位
+            swing_df['symbol'] = symbol
+            swing_df['timeframe'] = timeframe
+            swing_df['algorithm_name'] = algorithm_name
+            swing_df['version_hash'] = version_hash
+            
+            # 選擇需要的欄位
+            columns_to_insert = [
+                'symbol', 'timeframe', 'algorithm_name', 'version_hash', 'timestamp',
+                'zigzag_price', 'zigzag_type', 'zigzag_strength', 'zigzag_swing',
+                'swing_high', 'swing_low', 'swing_range', 'swing_duration', 'swing_direction'
+            ]
+            
+            # 確保所有欄位都存在，不存在的設為NULL
+            for col in columns_to_insert:
+                if col not in swing_df.columns:
+                    swing_df[col] = None
+            
+            swing_df = swing_df[columns_to_insert]
+            
+            # 刪除該symbol+timeframe+algorithm的舊資料
+            self.conn.execute("""
+                DELETE FROM swing_data 
+                WHERE symbol = ? AND timeframe = ? AND algorithm_name = ?
+            """, [symbol, timeframe, algorithm_name])
+            
+            # 插入新資料
+            self.conn.execute("""
+                INSERT INTO swing_data 
+                (symbol, timeframe, algorithm_name, version_hash, timestamp,
+                 zigzag_price, zigzag_type, zigzag_strength, zigzag_swing,
+                 swing_high, swing_low, swing_range, swing_duration, swing_direction)
+                SELECT symbol, timeframe, algorithm_name, version_hash, timestamp,
+                       zigzag_price, zigzag_type, zigzag_strength, zigzag_swing,
+                       swing_high, swing_low, swing_range, swing_duration, swing_direction
+                FROM swing_df
+            """)
+            
+            logger.info(f"Inserted {len(swing_df)} swing records for {symbol} {timeframe} {algorithm_name}")
+            return version_hash
+            
+        except Exception as e:
+            logger.error(f"Failed to insert swing data: {e}")
+            raise
+    
+    def insert_algorithm_statistics(self, symbol: str, timeframe: str, algorithm_name: str, 
+                                   version_hash: str, statistics: Dict):
+        """插入演算法統計資訊"""
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+            
+        try:
+            import json
+            
+            # 刪除舊統計資料
+            self.conn.execute("""
+                DELETE FROM algorithm_statistics 
+                WHERE symbol = ? AND timeframe = ? AND algorithm_name = ? AND version_hash = ?
+            """, [symbol, timeframe, algorithm_name, version_hash])
+            
+            # 插入新統計資料
+            self.conn.execute("""
+                INSERT INTO algorithm_statistics 
+                (symbol, timeframe, algorithm_name, version_hash, total_swings,
+                 avg_swing_range, avg_swing_duration, max_swing_range, min_swing_range,
+                 swing_ranges, swing_durations)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                symbol, timeframe, algorithm_name, version_hash,
+                statistics.get('total_swings', 0),
+                statistics.get('avg_swing_range', 0),
+                statistics.get('avg_swing_duration', 0),
+                statistics.get('max_swing_range', 0),
+                statistics.get('min_swing_range', 0),
+                json.dumps(statistics.get('swing_ranges', [])),
+                json.dumps(statistics.get('swing_durations', []))
+            ])
+            
+            logger.info(f"Inserted statistics for {symbol} {timeframe} {algorithm_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to insert algorithm statistics: {e}")
+            raise
+    
+    def get_swing_data(self, symbol: str, timeframe: str, algorithm: str,
+                      start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
+        """取得波段資料"""
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+            
+        try:
+            query = """
+                SELECT timestamp, zigzag_price, zigzag_type, zigzag_strength, zigzag_swing,
+                       swing_high, swing_low, swing_range, swing_duration, swing_direction
+                FROM swing_data
+                WHERE symbol = ? AND timeframe = ? AND algorithm_name = ?
+            """
+            params = [symbol, timeframe, algorithm]
+            
+            if start_date:
+                query += " AND timestamp >= ?"
+                params.append(start_date)
+            
+            if end_date:
+                query += " AND timestamp <= ?"
+                params.append(end_date)
+            
+            query += " ORDER BY timestamp"
+            
+            df = self.conn.execute(query, params).fetchdf()
+            
+            if not df.empty:
+                df.set_index('timestamp', inplace=True)
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Failed to get swing data: {e}")
+            return pd.DataFrame()
+    
+    def get_available_algorithms(self, symbol: str, timeframe: str) -> List[str]:
+        """取得可用的演算法"""
+        if not self.conn:
+            raise RuntimeError("Database connection not established")
+            
+        try:
+            query = """
+                SELECT DISTINCT algorithm_name
+                FROM swing_data
+                WHERE symbol = ? AND timeframe = ?
+                ORDER BY algorithm_name
+            """
+            result = self.conn.execute(query, [symbol, timeframe]).fetchall()
+            return [row[0] for row in result]
+            
+        except Exception as e:
+            logger.error(f"Failed to get available algorithms: {e}")
+            return []
     
     def close(self):
         """關閉資料庫連接"""

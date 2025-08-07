@@ -211,3 +211,9 @@ FRONTEND_PORT = 8050
 ---
 
 **注意**: 本專案僅供學習和研究使用，不構成投資建議。請謹慎使用並自負風險。 
+
+## Cleanup 清理紀錄
+
+- 本專案已進行清理，移除舊版/不再使用的「波段生成/重建與處理」、「資料重建與遷移（資料庫/資料）」與「測試」相關腳本，避免與目前僅保留的前端展示與核心庫衝突。
+- 前端仍維持以下檔案：`src/frontend/app.py`、`src/frontend/templates/index.html`、`src/frontend/static/app.js`、`src/frontend/static/style.css`，以及啟動腳本 `start_frontend.py`。
+- 詳細清單請參考 `CLEANUP_REPORT.md`。

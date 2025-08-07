@@ -36,7 +36,7 @@ class SwingProcessor:
         }
     
     def process_symbol_timeframe(self, symbol: str, timeframe: str, 
-                               algorithm_name: str = 'zigzag', batch_size: int = 10000, **algorithm_params):
+                               algorithm_name: str = 'zigzag', batch_size: int = 10000, limit: Optional[int] = None, **algorithm_params):
         """
         處理特定交易品種和時間週期的波段資料（分批處理）
         
@@ -52,7 +52,7 @@ class SwingProcessor:
             
             # 獲取蠟燭圖資料
             with DuckDBConnection(self.db_path) as db:
-                candlestick_df = db.get_candlestick_data(symbol, timeframe)
+                candlestick_df = db.get_candlestick_data(symbol, timeframe, limit=limit)
                 
                 if candlestick_df.empty:
                     logger.warning(f"沒有找到 {symbol} {timeframe} 的蠟燭圖資料")

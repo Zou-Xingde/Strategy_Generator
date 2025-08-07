@@ -6,7 +6,7 @@
             this.measurementLineSeries = null; // 測量連接線系列
             this.currentTimeframe = 'D1';
             this.symbol = 'XAUUSD'; // 預設為 XAUUSD
-            this.currentAlgorithm = 'zigzag_fixed'; // 預設演算法
+            this.currentAlgorithm = 'zigzag'; // 預設演算法
             this.measurementMode = false;
             this.measurementPoints = [];
             this.measurementLines = []; // 儲存測量線
