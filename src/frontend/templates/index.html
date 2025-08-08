@@ -73,6 +73,17 @@
         </div>
     </div>
 
+    <!-- 生成狀態區域（預設隱藏） -->
+    <div class="swing-status-area">
+        <div id="swing-progress" class="swing-progress" style="display: none;">
+            <div class="swing-progress-track">
+                <div id="swing-progress-fill" class="swing-progress-fill"></div>
+            </div>
+            <span id="swing-progress-text" class="swing-progress-text">0%</span>
+        </div>
+        <pre id="swing-log" class="swing-log" style="display: none;"></pre>
+    </div>
+
     <!-- 主要內容區域 -->
     <div class="main-content">
         <!-- 圖表區域 -->
@@ -146,6 +157,19 @@
             </div>
         </div>
     </div>
+
+    <!-- 波段生成進度條（預設隱藏） -->
+    <div id="swing-progress" style="position: fixed; left: 16px; right: 16px; bottom: 56px; background: rgba(0,0,0,0.4); border: 1px solid #444; border-radius: 6px; padding: 8px; display: none; z-index: 50;">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <div class="swing-progress-track" style="flex:1; height:8px; background:#333; border-radius:4px; overflow:hidden;">
+                <div id="swing-progress-fill" class="swing-progress-fill" style="height:100%; width:0%; background:#4caf50; transition: width .2s ease;"></div>
+            </div>
+            <span id="swing-progress-text" class="swing-progress-text" style="color:#fff; font-size:12px;">0%</span>
+        </div>
+    </div>
+
+    <!-- 波段生成 Log 視窗（預設隱藏） -->
+    <pre id="swing-log" style="position: fixed; left:16px; right:16px; bottom: 160px; max-height: 220px; overflow:auto; background:#111; color:#0f0; padding:8px; border:1px solid #333; border-radius:6px; display:none; white-space: pre-wrap; z-index: 50;"></pre>
 
     <!-- 底部狀態欄 -->
     <div class="status-bar">

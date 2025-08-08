@@ -6,12 +6,15 @@
             this.measurementLineSeries = null; // 測量連接線系列
             this.currentTimeframe = 'D1';
             this.symbol = 'XAUUSD'; // 預設為 XAUUSD
-            this.currentAlgorithm = 'zigzag'; // 預設演算法
+            this.currentAlgorithm = 'zigzag'; // 預設演算法 key（向後相容）
+            this.algoSpec = null; // 從 /algorithms/index.json 載入的當前規格
+            this.algoParamsState = {}; // 動態參數的本地狀態
             this.measurementMode = false;
             this.measurementPoints = [];
             this.measurementLines = []; // 儲存測量線
             this.swingLines = []; // 儲存波段連接線
             this.swingPoints = []; // 儲存波段點
+            this.swingTask = { ws: null, taskId: null, running: false };
             this.config = {};
             this.dataCount = 0; // 記錄數據總數
             
@@ -49,6 +52,7 @@
                     this.initChart();
                     this.setupEventListeners();
                     this.loadChart();
+                    this._setupSwingTaskUIRefs();
                     
                     // 確保下拉選單初始狀態是關閉的
                     this.forceCloseDropdowns();
@@ -59,6 +63,16 @@
                 console.error('Failed to initialize Market Swing Chart:', error);
             }
         }
+
+        _setupSwingTaskUIRefs() {
+            this.$progress = document.getElementById('swing-progress');
+            this.$progressFill = document.getElementById('swing-progress-fill');
+            this.$progressText = document.getElementById('swing-progress-text');
+            this.$log = document.getElementById('swing-log');
+            // 初始化為隱藏
+            if (this.$progress) this.$progress.style.display = 'none';
+            if (this.$log) this.$log.style.display = 'none';
+        }
         
         async loadConfig() {
             try {
@@ -67,9 +81,38 @@
                 this.config = await response.json();
                 this.symbol = this.config.symbol || 'XAUUSD';
                 console.log('Config loaded:', this.config);
+                // 同步載入演算法清單
+                await this.loadAlgorithmsIndex();
             } catch (error) {
                 console.error('載入配置失敗:', error);
             }
+        }
+
+        async loadAlgorithmsIndex() {
+            try {
+                const resp = await fetch('/algorithms/index.json');
+                const list = await resp.json();
+                this.algorithmsIndex = Array.isArray(list) ? list : [];
+                // 預設選第一個
+                if (this.algorithmsIndex.length && !this.algoSpec) {
+                    this.algoSpec = this.algorithmsIndex[0];
+                    this.currentAlgorithm = this.algoSpec.value;
+                    this.algoParamsState = this._defaultParamsFromSpec(this.algoSpec);
+                }
+                this.renderAlgorithmSelectorDynamic();
+            } catch (e) {
+                console.warn('載入演算法清單失敗，使用舊有下拉:', e);
+            }
+        }
+
+        _defaultParamsFromSpec(spec) {
+            const state = {};
+            if (spec && Array.isArray(spec.params)) {
+                spec.params.forEach(p => {
+                    state[p.name] = p.default;
+                });
+            }
+            return state;
         }
         
         initChart() {
@@ -1029,50 +1072,96 @@
         }
         
         setupAlgorithmSelector() {
-            console.log('正在設置演算法選擇器...');
-            
-            const algorithmBtn = document.getElementById('algorithm-dropdown');
-            const algorithmDropdown = document.getElementById('algorithm-dropdown-menu');
-            const currentAlgorithmSpan = document.getElementById('current-algorithm');
-            
-            if (algorithmBtn && algorithmDropdown) {
-                // 點擊演算法按鈕切換下拉選單
-                algorithmBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const selector = algorithmBtn.closest('.algorithm-selector');
-                    selector.classList.toggle('active');
+            // 舊實作保留，但會被動態渲染覆蓋
+            this.renderAlgorithmSelectorDynamic();
+        }
+
+        renderAlgorithmSelectorDynamic() {
+            const container = document.querySelector('.algorithm-selector');
+            if (!container) return;
+            const btn = container.querySelector('#algorithm-dropdown');
+            const menu = container.querySelector('#algorithm-dropdown-menu');
+            const labelSpan = container.querySelector('#current-algorithm');
+            if (!btn || !menu || !labelSpan) return;
+
+            // 以原有 dropdown 容器，清空並注入動態內容
+            menu.innerHTML = '';
+            (this.algorithmsIndex || []).forEach(spec => {
+                const div = document.createElement('div');
+                div.className = 'algorithm-option';
+                div.dataset.algorithm = spec.value;
+                div.textContent = spec.label || spec.value;
+                if (this.algoSpec && this.algoSpec.value === spec.value) {
+                    div.classList.add('selected');
+                }
+                div.addEventListener('click', () => {
+                    this.algoSpec = spec;
+                    this.currentAlgorithm = spec.value;
+                    this.algoParamsState = this._defaultParamsFromSpec(spec);
+                    this.renderAlgorithmSelectorDynamic();
                 });
-                
-                // 點擊選項切換演算法
-                algorithmDropdown.addEventListener('click', async (e) => {
-                    const option = e.target.closest('.algorithm-option');
-                    if (option) {
-                        const newAlgorithm = option.dataset.algorithm;
-                        await this.switchAlgorithm(newAlgorithm);
-                        
-                        // 更新選中狀態
-                        algorithmDropdown.querySelectorAll('.algorithm-option').forEach(opt => {
-                            opt.classList.remove('selected');
-                        });
-                        option.classList.add('selected');
-                        
-                        // 關閉下拉選單
-                        algorithmBtn.closest('.algorithm-selector').classList.remove('active');
-                    }
-                });
-                
-                // 初始化當前演算法顯示
-                this.updateAlgorithmDisplay();
-                
-                // 確保初始狀態下拉選單是關閉的
-                algorithmBtn.closest('.algorithm-selector').classList.remove('active');
+                menu.appendChild(div);
+            });
+
+            // 標籤
+            labelSpan.textContent = (this.algoSpec && this.algoSpec.label) ? this.algoSpec.label : (this.currentAlgorithm || 'ZigZag');
+
+            // 參數區塊（選單下方）
+            let paramsHost = container.querySelector('.algorithm-params');
+            if (!paramsHost) {
+                paramsHost = document.createElement('div');
+                paramsHost.className = 'algorithm-params';
+                paramsHost.style.marginTop = '6px';
+                paramsHost.style.display = 'grid';
+                paramsHost.style.gridTemplateColumns = 'repeat(auto-fit, minmax(120px, 1fr))';
+                paramsHost.style.gap = '6px';
+                container.appendChild(paramsHost);
             }
+            paramsHost.innerHTML = '';
+            if (this.algoSpec && Array.isArray(this.algoSpec.params) && this.algoSpec.params.length) {
+                this.algoSpec.params.forEach(p => {
+                    const wrap = document.createElement('label');
+                    wrap.style.color = '#ddd';
+                    wrap.style.fontSize = '12px';
+                    wrap.textContent = p.label || p.name;
+                    const input = document.createElement('input');
+                    input.type = p.type === 'number' ? 'number' : 'text';
+                    if (p.step != null) input.step = String(p.step);
+                    if (p.min != null) input.min = String(p.min);
+                    input.value = this.algoParamsState[p.name] ?? p.default ?? '';
+                    input.style.marginLeft = '6px';
+                    input.addEventListener('input', () => {
+                        const v = input.type === 'number' ? Number(input.value) : input.value;
+                        this.algoParamsState[p.name] = v;
+                    });
+                    wrap.appendChild(input);
+                    paramsHost.appendChild(wrap);
+                });
+                paramsHost.style.display = 'grid';
+            } else {
+                paramsHost.style.display = 'none';
+            }
+
+            // 點擊開關下拉
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                container.classList.toggle('active');
+            };
         }
         
         async switchAlgorithm(newAlgorithm) {
             console.log('切換演算法:', newAlgorithm);
+            // 兼容: 若從舊的 dataset.algorithm 來源
             this.currentAlgorithm = newAlgorithm;
-            this.updateAlgorithmDisplay();
+            // 嘗試從列表中找到 spec
+            if (this.algorithmsIndex) {
+                const found = this.algorithmsIndex.find(x => x.value === newAlgorithm);
+                if (found) {
+                    this.algoSpec = found;
+                    this.algoParamsState = this._defaultParamsFromSpec(found);
+                }
+            }
+            this.renderAlgorithmSelectorDynamic();
             
             // 清除現有的波段顯示
             this.clearSwingLines();
@@ -1082,28 +1171,7 @@
         }
         
         updateAlgorithmDisplay() {
-            const currentAlgorithmSpan = document.getElementById('current-algorithm');
-            if (currentAlgorithmSpan) {
-                // 將演算法名稱轉換為顯示名稱
-                const displayNames = {
-                    'zigzag': 'ZigZag',
-                    'fractal': 'Fractal',
-                    'pivot': 'Pivot'
-                };
-                currentAlgorithmSpan.textContent = displayNames[this.currentAlgorithm] || this.currentAlgorithm;
-            }
-            
-            // 更新選中狀態
-            const algorithmDropdown = document.getElementById('algorithm-dropdown-menu');
-            if (algorithmDropdown) {
-                algorithmDropdown.querySelectorAll('.algorithm-option').forEach(option => {
-                    if (option.dataset.algorithm === this.currentAlgorithm) {
-                        option.classList.add('selected');
-                    } else {
-                        option.classList.remove('selected');
-                    }
-                });
-            }
+            // 動態渲染方法已涵蓋顯示更新
         }
 
         
@@ -1228,9 +1296,7 @@
                     showSwingBtn.disabled = true;
                     
                     try {
-                        console.log('開始調用 showSwingData...');
-                    await this.showSwingData();
-                        console.log('showSwingData 調用完成');
+                        await this.startSwingGeneration();
                         
                         // 更新按鈕狀態
                         showSwingBtn.textContent = '📈';
@@ -1289,6 +1355,7 @@
                     
                     this.clearSwingLines();
                     this.clearSwingStatus();
+                    this.stopSwingGeneration();
                     
                     // 清除顯示波段按鈕的活動狀態
                     const showSwingBtn = document.getElementById('show-swing');
@@ -1379,6 +1446,144 @@
                     this.toggleFullscreen();
                 });
             }
+        }
+
+        // Swing generation lifecycle
+        async startSwingGeneration() {
+            if (this.swingTask.running) {
+                return;
+            }
+            this._showProgress(0);
+            this._appendLog('[ui] start swing generation');
+
+            const payload = {
+                symbol: this.symbol,
+                timeframe: this.currentTimeframe || 'D1',
+                algo: (this.algoSpec && this.algoSpec.value) ? this.algoSpec.value : (this.currentAlgorithm || 'zigzag'),
+                params: { ...(this.algoParamsState || {}) }
+            };
+            const resp = await fetch('/swing/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) {
+                const msg = await resp.text();
+                this._appendLog(`[error] start failed: ${msg}`);
+                throw new Error('start failed');
+            }
+            const data = await resp.json();
+            const taskId = data.task_id;
+            this.swingTask.taskId = taskId;
+            this.swingTask.running = true;
+
+            this._openSwingWS(taskId);
+        }
+
+        stopSwingGeneration() {
+            try {
+                if (this.swingTask.ws) {
+                    this.swingTask.ws.close();
+                }
+            } catch (e) {}
+            this.swingTask.ws = null;
+            this.swingTask.taskId = null;
+            this.swingTask.running = false;
+            this._hideProgress();
+            this._clearLog();
+        }
+
+        _openSwingWS(taskId) {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const url = `${proto}://${location.host}/swing/progress/${taskId}`;
+            let connectDelay = 150; // ms: avoid race between POST creation and WS subscribe
+            setTimeout(() => {
+                const ws = new WebSocket(url);
+                this.swingTask.ws = ws;
+
+                ws.onopen = () => {
+                    this._appendLog('[ws] connected');
+                };
+                ws.onmessage = (ev) => {
+                    // Debug raw WS payload
+                    try { console.log("WS message:", ev.data); } catch (_) {}
+                    try {
+                        const msg = JSON.parse(ev.data);
+                        if (msg.type === 'log') {
+                            this._appendLog(msg.line);
+                        } else if (msg.type === 'log_batch') {
+                            (msg.lines || []).forEach(line => this._appendLog(line));
+                        } else if (msg.type === 'progress') {
+                            const p = Number(msg.percent || 0);
+                            this._showProgress(p);
+                        } else if (msg.type === 'done') {
+                            this._showProgress(100);
+                            setTimeout(() => this._hideProgress(), 1000);
+                            // 刷新圖表資料
+                            this.loadChart(this.currentTimeframe);
+                        }
+                    } catch (e) {
+                        this._appendLog(`[ws error] ${String(e)}`);
+                    }
+                };
+                ws.onclose = (ev) => {
+                    this._appendLog('[ws] closed');
+                    try { console.log('WS closed', ev.code, ev.reason); } catch (_) {}
+                };
+                ws.onerror = () => {
+                    this._appendLog('[ws] error; falling back to HTTP polling');
+                    // Fallback polling if WS fails (e.g., proxy or browser policy)
+                    try { this._startProgressPolling(taskId); } catch (_) {}
+                };
+            }, connectDelay);
+        }
+
+        _startProgressPolling(taskId) {
+            if (this._pollTimer) clearInterval(this._pollTimer);
+            this._pollTimer = setInterval(async () => {
+                try {
+                    const r = await fetch(`/swing/progress/${taskId}/snapshot`);
+                    if (!r.ok) return;
+                    const j = await r.json();
+                    (j.lines || []).forEach(line => this._appendLog(line));
+                    this._showProgress(Number(j.percent || 0));
+                    if (j.done) {
+                        clearInterval(this._pollTimer);
+                        this._pollTimer = null;
+                        this._showProgress(100);
+                        setTimeout(() => this._hideProgress(), 1000);
+                        this.loadChart(this.currentTimeframe);
+                    }
+                } catch (_) { /* ignore */ }
+            }, 500);
+        }
+
+        _showProgress(percent) {
+            if (!this.$progress || !this.$progressFill || !this.$progressText) return;
+            this.$progress.style.display = 'flex';
+            const p = Math.max(0, Math.min(100, Number(percent) || 0));
+            this.$progressFill.style.width = `${p.toFixed(1)}%`;
+            this.$progressText.textContent = `${p.toFixed(1)}%`;
+        }
+
+        _hideProgress() {
+            if (!this.$progress) return;
+            this.$progress.style.display = 'none';
+            if (this.$progressFill) this.$progressFill.style.width = '0%';
+            if (this.$progressText) this.$progressText.textContent = '0%';
+        }
+
+        _appendLog(line) {
+            if (!this.$log) return;
+            this.$log.style.display = 'block';
+            this.$log.textContent += (this.$log.textContent ? '\n' : '') + String(line);
+            this.$log.scrollTop = this.$log.scrollHeight;
+        }
+
+        _clearLog() {
+            if (!this.$log) return;
+            this.$log.textContent = '';
+            this.$log.style.display = 'none';
         }
         
         resetChart() {

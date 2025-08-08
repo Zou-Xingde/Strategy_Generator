@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse
+import logging
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import pandas as pd
@@ -27,16 +28,27 @@ app = FastAPI(title="市場波段規律分析系統", version="1.0.0")
 # 靜態文件和模板
 static_dir = Path(__file__).parent / "static"
 templates_dir = Path(__file__).parent / "templates"
+algorithms_static_dir = static_dir / "algorithms"
 
 # 創建目錄（如果不存在）
 static_dir.mkdir(exist_ok=True)
 templates_dir.mkdir(exist_ok=True)
+algorithms_static_dir.mkdir(exist_ok=True)
 
 # 掛載靜態文件
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+# 掛載演算法靜態清單（/algorithms/index.json）
+app.mount("/algorithms", StaticFiles(directory=str(algorithms_static_dir)), name="algorithms")
 
 # 模板引擎
 templates = Jinja2Templates(directory=str(templates_dir))
+
+# 追加新路由（最小變更，不影響既有 API）
+try:
+    from src.frontend.routes.swing import router as swing_router
+    app.include_router(swing_router)
+except Exception as e:
+    logging.getLogger(__name__).exception("Failed to include swing routes: %s", e)
 
 # 全局變數
 current_symbol = "XAUUSD"  # 預設為 XAUUSD
@@ -153,6 +165,17 @@ class CandlestickData:
 async def index(request: Request):
     """主頁面"""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/favicon.ico")
+async def favicon() -> Response:
+    # Return a tiny transparent icon to suppress 404 noise
+    # 1x1 transparent PNG (base64)
+    data = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        b"\x00\x00\x00\x0bIDAT\x08\x1dc\x00\x01\x00\x00\x05\x00\x01\x0d\n\x2d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    return Response(content=data, media_type="image/png")
 
 
 

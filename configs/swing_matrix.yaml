@@ -1,0 +1,19 @@
+XAUUSD:
+  M5:
+    algo: algorithms.zigzag_percent:ZigZagPercent
+    params: { deviation: 0.3, depth: 10 }
+
+  H1:
+    algo: algorithms.atr_breakout:ATRBreakout
+    params: { lookback: 14, atr_mult: 1.7 }
+
+BTCUSD:
+  M15:
+    algo: algorithms.zigzag_percent:ZigZagPercent
+    params: { deviation: 0.8, depth: 12 }
+
+default:
+  algo: algorithms.zigzag_percent:ZigZagPercent
+  params: { deviation: 0.5, depth: 10 }
+
+

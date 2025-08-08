@@ -27,7 +27,8 @@ if __name__ == "__main__":
             host=FRONTEND_HOST,
             port=FRONTEND_PORT,
             reload=True,
-            log_level="info"
+            log_level="info",
+            ws="websockets"
         )
     except KeyboardInterrupt:
         print("\n👋 服務器已停止")

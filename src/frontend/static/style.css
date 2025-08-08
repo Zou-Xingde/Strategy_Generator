@@ -55,7 +55,37 @@ html, body {
 /* 演算法選擇器樣式 */
 .algorithm-selector {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Algorithm dynamic params layout */
+.algorithm-params {
+    display: inline-flex !important; /* override inline styles from JS */
+    align-items: center;
+    gap: 8px;
+    margin-top: 0 !important;       /* keep on same toolbar row */
+}
+
+.algorithm-params label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #ddd;
+    font-size: 12px;
+}
+
+.algorithm-params input[type="number"],
+.algorithm-params input[type="text"] {
+    height: 28px;
+    padding: 2px 6px;
+    min-width: 80px;
+    background: #1f2937;
+    border: 1px solid #4a5568;
+    color: #e2e8f0;
+    border-radius: 4px;
+    outline: none;
 }
 
 .algorithm-btn {
@@ -781,5 +811,61 @@ html, body {
         font-size: 11px;
         padding: 8px 4px;
     }
+}
+
+/* Swing generation progress and log */
+.swing-status-area {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 56px;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.swing-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 8px 10px;
+  backdrop-filter: blur(4px);
+}
+
+.swing-progress-track {
+  flex: 1;
+  height: 10px;
+  background: #2f2f2f;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.swing-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #4caf50, #2e7d32);
+  transition: width .2s ease;
+}
+
+.swing-progress-text {
+  color: #eaeaea;
+  font-size: 12px;
+  min-width: 48px;
+  text-align: right;
+}
+
+.swing-log {
+  max-height: 220px;
+  overflow: auto;
+  background: #0b0b0b;
+  color: #9fe59f;
+  padding: 8px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  white-space: pre-wrap;
 }
     
