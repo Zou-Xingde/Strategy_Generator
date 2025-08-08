@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# --- bootstrap sys.path for src imports ---
+import sys as _sys
+import pathlib as _pathlib
+_ROOT = _pathlib.Path(__file__).resolve().parents[1]
+_sys.path.insert(0, str(_ROOT))            # <repo_root>
+_sys.path.insert(0, str(_ROOT / "src"))    # <repo_root>/src
+# -----------------------------------------
 """
 Swing generation driver with matrix support.
 

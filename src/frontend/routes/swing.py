@@ -13,8 +13,11 @@ import threading
 router = APIRouter()
 
 
-# In-memory stores for progress and websocket subscribers
-progress_store: Dict[str, Dict[str, Any]] = {}
+# Centralized progress store and local WS subscribers (legacy broadcast only)
+try:
+    from src.backend.progress_store import store as progress_store  # type: ignore
+except Exception:  # fallback stub to avoid import-time errors
+    progress_store = None  # type: ignore
 subscribers: Dict[str, Set[WebSocket]] = {}
 
 
@@ -74,21 +77,24 @@ async def _run_task_and_stream(
     overlap: int = 0,
 ) -> None:
     root = _get_project_root()
-    script_path = root / "scripts" / "swing_generate.py"
-    if not script_path.exists():
-        # Fail fast and notify
-        progress_store[task_id] = {"percent": 0.0, "log": ["script not found"], "done": True}
-        await _broadcast(task_id, {"type": "log", "task_id": task_id, "line": "script not found"})
-        await _broadcast(task_id, {"type": "done", "task_id": task_id, "percent": 100.0})
-        return
 
-    # Ensure structures exist
-    progress_store.setdefault(task_id, {"percent": 0.0, "log": [], "done": False})
+    # Ensure structures exist in centralized store
+    try:
+        if progress_store is not None:
+            progress_store.set(task_id, {"stage": "started", "percent": 0, "logs": []})
+    except Exception:
+        pass
     subscribers.setdefault(task_id, set())
 
     try:
-        # Build CLI
-        args = [sys.executable, str(script_path)]
+        # Setup environment for module execution and PYTHONPATH
+        import os
+        env = os.environ.copy()
+        extra = os.pathsep.join([str(root), str(root / "src")])
+        env["PYTHONPATH"] = extra + os.pathsep + env.get("PYTHONPATH", "")
+
+        # Build module CLI
+        args = [sys.executable, "-m", "scripts.swing_generate"]
         if config_path:
             args += ["--config", config_path]
         if symbol:
@@ -103,7 +109,6 @@ async def _run_task_and_stream(
             args += ["--batch-size", str(batch_size)]
         if overlap:
             args += ["--overlap", str(overlap)]
-        # Optional dry-run propagated via params flag 'dry_run': true
         try:
             if params and isinstance(params, dict) and params.get("dry_run"):
                 args += ["--dry-run"]
@@ -111,10 +116,13 @@ async def _run_task_and_stream(
             pass
 
         logger.info("CLI: %s", args)
-        # Announce start to clients
-        progress_store[task_id]["log"].append(f"[server] start task {task_id}")
+        # Announce start to clients and store
+        try:
+            if progress_store is not None:
+                progress_store.append_log(task_id, f"[server] start task {task_id}")
+        except Exception:
+            pass
         await _broadcast(task_id, {"type": "log", "task_id": task_id, "line": f"[server] start task {task_id}"})
-        await _broadcast(task_id, {"type": "progress", "task_id": task_id, "percent": float(progress_store[task_id]["percent"])})
 
         try:
             # Preferred async subprocess (may fail on some Windows loop policies)
@@ -123,6 +131,7 @@ async def _run_task_and_stream(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(root),
+                env=env,
             )
 
             assert proc.stdout is not None
@@ -135,26 +144,37 @@ async def _run_task_and_stream(
 
                 logger.debug("stdout: %s", line.strip())
 
-                # Append log
-                entry = progress_store[task_id]
-                entry["log"].append(line)
+                # Append log to centralized store
+                try:
+                    if progress_store is not None:
+                        progress_store.append_log(task_id, line)
+                except Exception:
+                    pass
                 await _broadcast(task_id, {"type": "log", "task_id": task_id, "line": line})
 
                 # Prefer explicit PROGRESS marker
                 if line.startswith("PROGRESS "):
                     try:
                         pval = float(line.split(" ", 1)[1])
-                        entry["percent"] = max(0.0, min(100.0, pval))
+                        try:
+                            if progress_store is not None:
+                                progress_store.set(task_id, {"percent": max(0.0, min(100.0, pval))})
+                        except Exception:
+                            pass
                         await _broadcast(
                             task_id,
-                            {"type": "progress", "task_id": task_id, "percent": entry["percent"]},
+                            {"type": "progress", "task_id": task_id, "percent": pval},
                         )
                     except Exception:
                         pass
                 else:
                     p = _parse_progress(line)
                     if p >= 0:
-                        entry["percent"] = p
+                        try:
+                            if progress_store is not None:
+                                progress_store.set(task_id, {"percent": p})
+                        except Exception:
+                            pass
                         await _broadcast(task_id, {"type": "progress", "task_id": task_id, "percent": p})
 
             # Wait return code
@@ -170,6 +190,7 @@ async def _run_task_and_stream(
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     cwd=str(root),
+                    env=env,
                     text=True,
                     bufsize=1,
                     universal_newlines=True,
@@ -187,37 +208,54 @@ async def _run_task_and_stream(
                 if line is None:
                     break
                 logger.debug("stdout: %s", line.strip())
-                entry = progress_store[task_id]
-                entry["log"].append(line)
+                try:
+                    if progress_store is not None:
+                        progress_store.append_log(task_id, line)
+                except Exception:
+                    pass
                 await _broadcast(task_id, {"type": "log", "task_id": task_id, "line": line})
                 if line.startswith("PROGRESS "):
                     try:
                         pval = float(line.split(" ", 1)[1])
-                        entry["percent"] = max(0.0, min(100.0, pval))
-                        await _broadcast(task_id, {"type": "progress", "task_id": task_id, "percent": entry["percent"]})
+                        try:
+                            if progress_store is not None:
+                                progress_store.set(task_id, {"percent": max(0.0, min(100.0, pval))})
+                        except Exception:
+                            pass
+                        await _broadcast(task_id, {"type": "progress", "task_id": task_id, "percent": pval})
                     except Exception:
                         pass
                 else:
                     p = _parse_progress(line)
                     if p >= 0:
-                        entry["percent"] = p
+                        try:
+                            if progress_store is not None:
+                                progress_store.set(task_id, {"percent": p})
+                        except Exception:
+                            pass
                         await _broadcast(task_id, {"type": "progress", "task_id": task_id, "percent": p})
 
-        # Mark done
-        progress_store[task_id]["done"] = True
-        progress_store[task_id]["percent"] = 100.0
+        # Mark done only on success path
+        try:
+            if progress_store is not None:
+                progress_store.set(task_id, {"stage": "done", "percent": 100})
+        except Exception:
+            pass
         await _broadcast(task_id, {"type": "done", "task_id": task_id, "percent": 100.0})
     except Exception as e:  # pragma: no cover
         logger.exception("task %s failed", task_id)
         try:
-            # Record error into log and notify clients
-            entry = progress_store.setdefault(task_id, {"percent": 0.0, "log": [], "done": False})
-            entry["log"].append(f"[error] {e}")
+            # Record error into log and set strict error stage
+            try:
+                if progress_store is not None:
+                    progress_store.append_log(task_id, f"[error] {e}")
+                    progress_store.set(task_id, {"stage": "error", "percent": 100})
+            except Exception:
+                pass
             await _broadcast(task_id, {"type": "log", "task_id": task_id, "line": f"[error] {e}"})
             await _broadcast(task_id, {"type": "error", "task_id": task_id, "message": str(e)})
         finally:
-            # ensure done flag to unblock listeners
-            progress_store[task_id]["done"] = True
+            # Do not mark done on failures
 
 
 @router.post("/swing/generate")
@@ -230,12 +268,18 @@ async def swing_generate(payload: Dict[str, Any]):
     overlap = int(payload.get("overlap") or 0)
     dry_run = bool(payload.get("dry_run") or False)
 
-    task_id = uuid.uuid4().hex
-    # Initialize store
-    progress_store[task_id] = {"percent": 0.0, "log": [], "done": False}
+    # 1) 取得/產生 taskId（支援前端傳入）
+    task_id = payload.get("taskId") or uuid.uuid4().hex
+
+    # 2) 立刻初始化進度，避免前端查 snapshot 出現 404
+    try:
+        if progress_store is not None:
+            progress_store.set(task_id, {"stage": "started", "percent": 0, "logs": ["task created"]})
+    except Exception:
+        pass
     subscribers[task_id] = set()
 
-    # Fire-and-forget background task
+    # 3) 啟動背景任務（不要阻塞回應）
     if symbol and timeframe:
         asyncio.create_task(
             _run_task_and_stream(
@@ -253,64 +297,20 @@ async def swing_generate(payload: Dict[str, Any]):
         # No specific symbol/timeframe provided -> run entire matrix using default config
         config_path = str((_get_project_root() / "configs" / "swing_matrix.yaml").resolve())
         asyncio.create_task(_run_task_and_stream(task_id, config_path=config_path))
-    return {"task_id": task_id}
+    # 4) 立即回應（舊前端使用 task_id，雙欄位回傳以相容）
+    return {"taskId": task_id, "task_id": task_id}
 
 
-@router.websocket("/swing/progress/{task_id}")
+# LEGACY (disabled): superseded by src.backend.swing_progress_router
+# @router.websocket("/swing/_legacy_progress/{task_id}")
 async def swing_progress_ws(websocket: WebSocket, task_id: str):
-    # 允許來自任意 Origin 的升級，並記錄握手請求頭方便排查
-    try:
-        logger.info("WS connect task_id=%s origin=%s host=%s", task_id, websocket.headers.get("origin"), websocket.headers.get("host"))
-        await websocket.accept()
-    except Exception as e:
-        logger.exception("WS accept failed for task_id=%s: %s", task_id, e)
-        return
-
-    subscribers.setdefault(task_id, set()).add(websocket)
-
-    # On join, send snapshot if exists
-    snap = progress_store.get(task_id)
-    if snap:
-        # Send historical logs (trim to last 200 lines to avoid flooding)
-        history: List[str] = snap.get("log", [])[-200:]
-        if history:
-            await websocket.send_json({"type": "log_batch", "task_id": task_id, "lines": history})
-        await websocket.send_json({"type": "progress", "task_id": task_id, "percent": float(snap.get("percent", 0.0))})
-        if snap.get("done"):
-            await websocket.send_json({"type": "done", "task_id": task_id, "percent": float(snap.get("percent", 100.0))})
-
-    try:
-        # Keep the connection open;我們不期待客戶端主動發送任何訊息
-        while True:
-            await asyncio.sleep(30)
-    except WebSocketDisconnect:
-        logger.info("WS disconnect task_id=%s", task_id)
-    finally:
-        # Cleanup subscription
-        try:
-            subscribers.get(task_id, set()).discard(websocket)
-        except Exception:
-            pass
+    return
 
 
-@router.get("/swing/progress/{task_id}/snapshot")
+# LEGACY (disabled): superseded by src.backend.swing_progress_router
+# @router.get("/swing/_legacy_progress/{task_id}/snapshot")
 async def swing_progress_snapshot(task_id: str):
-    """HTTP fallback: return current progress snapshot for polling.
-    Never 404 to avoid client console spam; return empty snapshot instead.
-    """
-    snap = progress_store.get(task_id)
-    if not snap:
-        # Initialize an empty snapshot to be gentle with polling clients
-        progress_store[task_id] = {"percent": 0.0, "log": [], "done": False}
-        snap = progress_store[task_id]
-    # Return a trimmed log to avoid large payloads
-    history: List[str] = snap.get("log", [])[-200:]
-    return {
-        "task_id": task_id,
-        "percent": float(snap.get("percent", 0.0)),
-        "done": bool(snap.get("done", False)),
-        "lines": history,
-    }
+    return {"legacy": True}
 
 
 @router.get("/swing/matrix")
@@ -335,10 +335,15 @@ async def swing_generate_matrix(payload: Dict[str, Any] = None):
     payload = payload or {}
     config_path = payload.get("config") or str((_get_project_root() / "configs" / "swing_matrix.yaml").resolve())
 
-    task_id = uuid.uuid4().hex
-    progress_store[task_id] = {"percent": 0.0, "log": [], "done": False}
+    # 支援外部自帶 taskId
+    task_id = payload.get("taskId") or uuid.uuid4().hex
+    try:
+        if progress_store is not None:
+            progress_store.set(task_id, {"stage": "started", "percent": 0, "logs": ["task created"]})
+    except Exception:
+        pass
     subscribers[task_id] = set()
     asyncio.create_task(_run_task_and_stream(task_id, config_path=config_path))
-    return {"task_id": task_id}
+    return {"taskId": task_id, "task_id": task_id}
 
 

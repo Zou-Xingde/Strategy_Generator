@@ -3,6 +3,7 @@ import logging
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.cors import CORSMiddleware
 import pandas as pd
 import numpy as np
 import sys
@@ -16,7 +17,7 @@ from pathlib import Path
 # 添加專案根目錄到路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from config.settings import (
+from src.config.settings import (
     DUCKDB_PATH, TIMEFRAMES, FRONTEND_HOST, FRONTEND_PORT,
     MEASUREMENT_COLORS, CANDLESTICK_COLORS
 )
@@ -24,6 +25,15 @@ from src.database.connection import DuckDBConnection
 
 # 創建FastAPI應用
 app = FastAPI(title="市場波段規律分析系統", version="1.0.0")
+
+# CORS（同域下無害，跨域時可使用）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 靜態文件和模板
 static_dir = Path(__file__).parent / "static"
@@ -35,20 +45,31 @@ static_dir.mkdir(exist_ok=True)
 templates_dir.mkdir(exist_ok=True)
 algorithms_static_dir.mkdir(exist_ok=True)
 
-# 掛載靜態文件
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-# 掛載演算法靜態清單（/algorithms/index.json）
-app.mount("/algorithms", StaticFiles(directory=str(algorithms_static_dir)), name="algorithms")
-
 # 模板引擎
 templates = Jinja2Templates(directory=str(templates_dir))
 
-# 追加新路由（最小變更，不影響既有 API）
+# 先掛新的進度通道路由（共用 InMemoryProgressStore）
+try:
+    from src.backend.swing_progress_router import router as swing_progress_router
+    app.include_router(swing_progress_router)
+except Exception as e:
+    logging.getLogger(__name__).exception("Failed to include swing progress router: %s", e)
+
+# 後掛其餘 legacy API（已移除重複路徑）
 try:
     from src.frontend.routes.swing import router as swing_router
     app.include_router(swing_router)
 except Exception as e:
     logging.getLogger(__name__).exception("Failed to include swing routes: %s", e)
+
+# 在路由之後掛載靜態資源，避免覆蓋 API/WS
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# 提供演算法清單檔案（保持舊前端請求路徑 /algorithms/index.json 可用，避免再掛一個 StaticFiles 在根目錄）
+@app.get("/algorithms/index.json", include_in_schema=False)
+async def algorithms_index():
+    target = algorithms_static_dir / "index.json"
+    return FileResponse(str(target))
 
 # 全局變數
 current_symbol = "XAUUSD"  # 預設為 XAUUSD
@@ -161,10 +182,10 @@ class CandlestickData:
         except Exception as e:
             return {"error": str(e), "data": []}
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    """主頁面"""
-    return templates.TemplateResponse("index.html", {"request": request})
+@app.get("/", include_in_schema=False)
+async def index():
+    """回前端首頁檔案"""
+    return FileResponse(str(templates_dir / "index.html"))
 
 
 @app.get("/favicon.ico")
@@ -178,6 +199,65 @@ async def favicon() -> Response:
     return Response(content=data, media_type="image/png")
 
 
+
+# SPA fallback：非 API/非靜態/非 docs 的 404 回首頁
+@app.middleware("http")
+async def spa_fallback(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/swing") or path.startswith("/api") or path.startswith("/static") \
+       or path.startswith("/docs") or path.startswith("/openapi") \
+       or path.startswith("/redoc") or path.startswith("/healthz"):
+        return await call_next(request)
+
+    last = path.rsplit("/", 1)[-1]
+    if "." in last:
+        return await call_next(request)
+
+    resp = await call_next(request)
+    if resp.status_code == 404:
+        return FileResponse(str(templates_dir / "index.html"))
+    return resp
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"ok": True}
+
+
+# Factory wrapper to add debug endpoints and return the same app instance
+def create_app() -> FastAPI:
+    @app.get("/__whoami", include_in_schema=False)
+    def whoami():
+        import os
+        return {"app_file": __file__, "cwd": os.getcwd()}
+
+    @app.get("/__routes", include_in_schema=False)
+    def list_routes():
+        return [r.path for r in app.router.routes]
+
+    @app.get("/__routes_full", include_in_schema=False)
+    def list_routes_full():
+        data = []
+        for r in app.router.routes:
+            try:
+                path = getattr(r, "path", None)
+                methods = sorted(list(getattr(r, "methods", set()))) if hasattr(r, "methods") else []
+                endpoint = getattr(r, "endpoint", None)
+                mod = getattr(endpoint, "__module__", None) if endpoint else None
+                name = getattr(endpoint, "__name__", None) if endpoint else None
+                data.append({
+                    "path": path,
+                    "methods": methods,
+                    "endpoint_module": mod,
+                    "endpoint_name": name,
+                })
+            except Exception:
+                pass
+        return data
+
+    return app
+
+# Re-export the app via factory (adds debug endpoints)
+app = create_app()
 
 @app.get("/api/candlestick/{symbol}/{timeframe}")
 async def get_candlestick_data(

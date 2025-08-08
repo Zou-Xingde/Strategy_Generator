@@ -16,8 +16,8 @@ from pathlib import Path
 # 添加專案根目錄到路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from config.settings import DUCKDB_PATH, TIMEFRAMES
-from config.version_control import get_algorithm_parameters, get_version_description
+from src.config.settings import DUCKDB_PATH, TIMEFRAMES
+from src.config.version_control import get_algorithm_parameters, get_version_description
 from src.database.connection import DuckDBConnection
 from src.algorithms.zigzag import ZigZagAlgorithm
 

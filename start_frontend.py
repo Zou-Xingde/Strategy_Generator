@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import uvicorn
-from config.settings import FRONTEND_HOST, FRONTEND_PORT
+from src.config.settings import FRONTEND_HOST, FRONTEND_PORT
 
 if __name__ == "__main__":
     print("🚀 啟動高性能FastAPI前端...")
