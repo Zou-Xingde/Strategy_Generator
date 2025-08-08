@@ -10,7 +10,7 @@ import subprocess
 import threading
 
 
-router = APIRouter()
+router = APIRouter(prefix="/swing", tags=["swing"])
 
 
 # Centralized progress store and local WS subscribers (legacy broadcast only)
@@ -256,9 +256,10 @@ async def _run_task_and_stream(
             await _broadcast(task_id, {"type": "error", "task_id": task_id, "message": str(e)})
         finally:
             # Do not mark done on failures
+            pass
 
 
-@router.post("/swing/generate")
+@router.post("/generate")
 async def swing_generate(payload: Dict[str, Any]):
     symbol = payload.get("symbol")
     timeframe = payload.get("timeframe")
@@ -313,7 +314,7 @@ async def swing_progress_snapshot(task_id: str):
     return {"legacy": True}
 
 
-@router.get("/swing/matrix")
+@router.get("/matrix")
 async def get_swing_matrix():
     """Return matrix YAML as JSON."""
     root = _get_project_root()
@@ -329,7 +330,7 @@ async def get_swing_matrix():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/swing/generate-matrix")
+@router.post("/generate-matrix")
 async def swing_generate_matrix(payload: Dict[str, Any] = None):
     """Launch swing generation for entire matrix (or specified config path)."""
     payload = payload or {}
