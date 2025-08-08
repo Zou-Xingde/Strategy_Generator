@@ -48,27 +48,50 @@ class SwingProcessor:
             **algorithm_params: 演算法參數
         """
         try:
+            # 參數正規化與預設
+            symbol = (symbol or '').strip()
+            timeframe = (timeframe or '').strip()
+            algorithm_name = (algorithm_name or 'zigzag').strip().lower()
+            algorithm_params = algorithm_params if isinstance(algorithm_params, dict) else {}
+
+            # timeframe 驗證
+            if timeframe not in TIMEFRAMES:
+                msg = f"Unsupported timeframe: {timeframe}"
+                logger.error("input-error: %s", msg)
+                raise ValueError(msg)
+
             logger.info(f"開始處理 {symbol} {timeframe} 的波段資料，使用 {algorithm_name} 演算法，批次大小: {batch_size}")
-            
+
+            # 取得與合併演算法參數（defaults 覆蓋為基底，使用者參數覆蓋 defaults）
+            try:
+                default_params = get_algorithm_parameters(algorithm_name)
+                default_params = default_params if isinstance(default_params, dict) else {}
+            except Exception as _e:  # 極端情況防呆
+                default_params = {}
+            algo_params = {**default_params, **(algorithm_params or {})}
+
             # 獲取蠟燭圖資料
             with DuckDBConnection(self.db_path) as db:
                 candlestick_df = db.get_candlestick_data(symbol, timeframe, limit=limit)
-                
-                if candlestick_df.empty:
-                    logger.warning(f"沒有找到 {symbol} {timeframe} 的蠟燭圖資料")
-                    return
-                
+
+                if candlestick_df is None or getattr(candlestick_df, 'empty', True):
+                    msg = f"No data for symbol={symbol} timeframe={timeframe}"
+                    logger.error("input-error: %s", msg)
+                    raise ValueError(msg)
+
                 total_records = len(candlestick_df)
                 logger.info(f"獲取到 {total_records} 筆蠟燭圖資料")
-                
+
                 # 執行演算法計算
                 algorithm = self.algorithms.get(algorithm_name)
                 if not algorithm:
-                    raise ValueError(f"不支援的演算法: {algorithm_name}")
-                
+                    msg = f"不支援的演算法: {algorithm_name}"
+                    logger.error("input-error: %s", msg)
+                    raise ValueError(msg)
+
                 # 設定演算法參數
-                if algorithm_params:
-                    algorithm.set_parameters(**algorithm_params)
+                if algo_params:
+                    algorithm.set_parameters(**algo_params)
                 
                 # 分批處理
                 all_swing_points = []
@@ -103,10 +126,10 @@ class SwingProcessor:
                     combined_df = self._create_combined_swing_df(candlestick_df, all_swing_points)
                     
                     # 獲取演算法參數
-                    algorithm_parameters = algorithm.get_parameters()
+                    algorithm_parameters = algorithm.get_parameters() or {}
                     
                     # 生成版本描述
-                    version_description = get_version_description(algorithm_name, f"{algorithm_name}_v1")
+                    version_description = get_version_description()
                     
                     # 存儲到資料庫（支援版本控制）
                     version_hash = db.insert_swing_data(
