@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Swing</title>
+</head>
+<body>
+    <h1>測試頁面</h1>
+    <p>如果您能看到這個，說明HTML渲染正常</p>
+    
+    <div>
+        <label for="start-date">開始日期:</label>
+        <input type="date" id="start-date">
+        <label for="end-date">結束日期:</label>
+        <input type="date" id="end-date">
+        <button id="test-btn">測試按鈕</button>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('頁面載入完成');
+            const btn = document.getElementById('test-btn');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    alert('按鈕功能正常');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

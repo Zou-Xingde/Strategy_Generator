@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="app-container">
+    {% include "components/toolbar.html" %}
+    
+    <!-- 主要內容區域 -->
+    <main class="main-content" role="main">
+        <!-- 圖表容器 -->
+        <div class="chart-section">
+            <div class="chart-container" role="img" aria-label="交易圖表">
+                <div id="chart" class="trading-chart"></div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- 底部狀態欄 -->
+    <footer class="status-bar" role="status" aria-live="polite">
+        <div class="status-left">
+            <span id="connection-status" class="status-indicator">🟢 已連接</span>
+        </div>
+        <div class="status-center">
+            <span id="current-time" class="current-time"></span>
+        </div>
+        <div class="status-right">
+            <span id="data-count">數據量: -</span>
+            <span class="separator">|</span>
+            <span id="generation-status">就緒</span>
+        </div>
+    </footer>
+</div>
+
+<!-- 參數設置彈出視窗 -->
+<div class="params-popup" id="params-popup" role="dialog" aria-labelledby="params-title" aria-hidden="true">
+    <div class="params-dialog">
+        <div class="params-header">
+            <h3 id="params-title">參數設置</h3>
+            <button class="close-btn" id="close-params" aria-label="關閉參數設置">&times;</button>
+        </div>
+        <div class="params-content">
+            <form id="params-form" class="params-form">
+                <div class="params-form-group">
+                    <label for="deviation-param">Deviation (%)</label>
+                    <input type="number" id="deviation-param" name="deviation" value="3.0" min="0.1" max="100" step="0.1" aria-describedby="deviation-help">
+                    <small id="deviation-help">ZigZag偏差百分比</small>
+                </div>
+                <div class="params-form-group">
+                    <label for="depth-param">Depth</label>
+                    <input type="number" id="depth-param" name="depth" value="12" min="1" max="100" step="1" aria-describedby="depth-help">
+                    <small id="depth-help">回溯深度</small>
+                </div>
+                <div class="params-form-group">
+                    <label for="min-swing-bars-param">MinBars</label>
+                    <input type="number" id="min-swing-bars-param" name="min_swing_bars" value="2" min="1" max="50" step="1" aria-describedby="min-swing-bars-help">
+                    <small id="min-swing-bars-help">最小波段K線數</small>
+                </div>
+                
+                <!-- 智能分層選項 -->
+                <div class="params-form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="smart-layers" name="smart_layers" checked>
+                        智能分層優化 (建議開啟)
+                    </label>
+                    <small>自動分析數據特性並優化計算參數</small>
+                </div>
+                
+                <!-- 智能分析結果顯示區 -->
+                <div class="smart-analysis-section" id="smart-analysis-section" style="display: none;">
+                    <div class="analysis-header">
+                        <h4>🧠 智能分析結果</h4>
+                        <button type="button" class="refresh-analysis-btn" id="refresh-analysis">📊 重新分析</button>
+                    </div>
+                    <div class="analysis-content" id="analysis-content">
+                        <div class="analysis-loading">正在分析數據特性...</div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="params-actions">
+            <button class="popup-btn cancel-btn" id="cancel-params" type="button">取消</button>
+            <button class="popup-btn confirm-btn" id="confirm-params" type="submit">確認</button>
+        </div>
+    </div>
+</div>
+
+<!-- 測量工具結果彈窗 -->
+<div class="measurement-popup" id="measurement-popup" role="dialog" aria-labelledby="measurement-title" aria-hidden="true">
+    <div class="measurement-dialog">
+        <div class="measurement-header">
+            <h3 id="measurement-title">📏 測量結果</h3>
+            <button class="close-btn" id="close-measurement" aria-label="關閉測量結果">&times;</button>
+        </div>
+        <div class="measurement-content">
+            <div class="measurement-item">
+                <span class="measurement-label">價格變化:</span>
+                <span class="measurement-value" id="measurement-price-diff">0.00</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">變化百分比:</span>
+                <span class="measurement-value" id="measurement-change-percent">0.00%</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">時間跨度:</span>
+                <span class="measurement-value" id="measurement-time-diff">-</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">趨勢方向:</span>
+                <span class="measurement-value" id="measurement-direction">-</span>
+            </div>
+        </div>
+        <div class="measurement-actions">
+            <button class="popup-btn primary-btn" id="confirm-measurement" type="button">確認</button>
+        </div>
+    </div>
+</div>
+
+<!-- 波段生成進度條 -->
+<div id="swing-progress" style="position: fixed; left: 16px; right: 16px; bottom: 56px; background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 6px; padding: 12px; display: none; z-index: 1000;">
+    <div class="progress-info" id="progress-info" style="font-size: 12px; margin-bottom: 8px; color: #ccc;">
+        準備開始計算...
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="swing-progress-track" style="flex:1; height:8px; background:#333; border-radius:4px; overflow:hidden;">
+            <div id="swing-progress-fill" class="swing-progress-fill" style="height:100%; width:0%; background:#4caf50; transition: width .2s ease;"></div>
+        </div>
+        <span id="swing-progress-text" class="swing-progress-text" style="color:#fff; font-size:12px; min-width:40px;">0%</span>
+    </div>
+    <div class="progress-details" id="progress-details" style="font-size: 11px; margin-top: 6px; color: #aaa;">
+        <div id="current-stage">等待開始...</div>
+        <div id="stage-progress" style="margin-top: 2px;"></div>
+    </div>
+</div>
+
+<!-- 智能分析狀態窗口 -->
+<div id="analysis-status-window" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; background: rgba(0,0,0,0.95); border: 2px solid #444; border-radius: 8px; color: #fff; display: none; z-index: 1001; font-family: 'Segoe UI', sans-serif;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #444; background: rgba(255,255,255,0.05);">
+        <h3 style="margin: 0; color: #fff; font-size: 16px;">🧠 智能分析中</h3>
+        <button style="background: none; border: none; color: #ccc; font-size: 20px; cursor: pointer; padding: 0; line-height: 1;" onclick="document.getElementById('analysis-status-window').style.display='none'">×</button>
+    </div>
+    <div style="padding: 20px;">
+        <div class="analysis-steps" id="analysis-steps">
+            <div class="step-item" id="step-data-load" style="display: flex; align-items: center; margin: 8px 0; font-size: 13px;">
+                <span class="step-icon" style="margin-right: 8px;">🔄</span>
+                <span class="step-text" style="flex: 1;">載入數據樣本...</span>
+                <span class="step-status">⏳</span>
+            </div>
+            <div class="step-item" id="step-data-analysis" style="display: flex; align-items: center; margin: 8px 0; font-size: 13px;">
+                <span class="step-icon" style="margin-right: 8px;">📊</span>
+                <span class="step-text" style="flex: 1;">分析數據特性...</span>
+                <span class="step-status">⏱️</span>
+            </div>
+            <div class="step-item" id="step-param-calc" style="display: flex; align-items: center; margin: 8px 0; font-size: 13px;">
+                <span class="step-icon" style="margin-right: 8px;">⚙️</span>
+                <span class="step-text" style="flex: 1;">計算最佳參數...</span>
+                <span class="step-status">⏱️</span>
+            </div>
+            <div class="step-item" id="step-strategy-select" style="display: flex; align-items: center; margin: 8px 0; font-size: 13px;">
+                <span class="step-icon" style="margin-right: 8px;">🎯</span>
+                <span class="step-text" style="flex: 1;">選擇處理策略...</span>
+                <span class="step-status">⏱️</span>
+            </div>
+        </div>
+        <div class="analysis-result" id="analysis-result" style="margin-top: 20px; display: none;">
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                <div style="font-weight: bold; margin-bottom: 8px;">📊 數據概況</div>
+                <div id="data-overview" style="font-size: 13px; line-height: 1.4;"></div>
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 4px; margin-bottom: 12px;">
+                <div style="font-weight: bold; margin-bottom: 8px;">⚙️ 計算策略</div>
+                <div id="calculation-strategy" style="font-size: 13px; line-height: 1.4;"></div>
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 4px;">
+                <div style="font-weight: bold; margin-bottom: 8px;">⏱️ 效能預估</div>
+                <div id="performance-estimation" style="font-size: 13px; line-height: 1.4;"></div>
+            </div>
+        </div>
+        <div class="analysis-actions" id="analysis-actions" style="margin-top: 20px; text-align: right; display: none;">
+            <button style="background: #666; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 8px;" onclick="document.getElementById('analysis-status-window').style.display='none'">修改參數</button>
+            <button style="background: #4CAF50; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer;" id="confirm-analysis-and-execute">確認執行</button>
+        </div>
+    </div>
+</div>
+
+<!-- 波段列表懸浮視窗 -->
+<div id="swing-list-popup" class="swing-list-popup" style="display: none;">
+    <div class="swing-list-header">
+        <span class="swing-list-title">📋 波段列表</span>
+        <button class="swing-list-close" onclick="closeSwingListPopup()">×</button>
+    </div>
+    <div class="swing-list-content">
+        <div class="swing-list-table">
+            <div class="swing-list-row swing-list-header-row">
+                <div class="swing-list-cell">開始時間</div>
+                <div class="swing-list-cell">開始價格</div>
+                <div class="swing-list-cell">結束時間</div>
+                <div class="swing-list-cell">結束價格</div>
+                <div class="swing-list-cell">價差</div>
+                <div class="swing-list-cell">時差</div>
+            </div>
+            <div id="swing-list-body">
+                <!-- 波段列表內容將在這裡動態生成 -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 波段生成日誌 -->
+<div id="swing-log" style="position: fixed; left: 16px; right: 16px; bottom: 120px; max-height: 200px; background: rgba(0,0,0,0.9); border: 1px solid #444; border-radius: 6px; color: #fff; font-family: monospace; font-size: 11px; display: none; z-index: 999;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #444;">
+        <span style="font-weight: bold;">執行日誌</span>
+        <div style="cursor: pointer; color: #ccc; font-size: 18px; line-height: 1; padding: 0 4px;" onclick="document.getElementById('swing-log').style.display='none'">×</div>
+    </div>
+    <div style="padding: 8px; overflow-y: auto; max-height: 160px; white-space: pre-wrap;"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/swing.js?v={{ cache_buster }}"></script>
+{% endblock %}

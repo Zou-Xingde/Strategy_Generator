@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Any
 import sys
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
 
 # 添加專案根目錄到路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -19,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from config.settings import DUCKDB_PATH, TIMEFRAMES
 from config.version_control import get_algorithm_parameters, get_version_description
 from src.database.connection import DuckDBConnection
+from src.utils.timeframe import normalize_timeframe
 from src.algorithms.zigzag import ZigZagAlgorithm
 
 # 設定日誌
@@ -36,31 +38,33 @@ class SwingProcessor:
         }
     
     def process_symbol_timeframe(self, symbol: str, timeframe: str, 
-                               algorithm_name: str = 'zigzag', batch_size: int = 10000, limit: Optional[int] = None, **algorithm_params):
+                               algorithm_name: str = 'zigzag', limit: Optional[int] = None, **algorithm_params):
         """
-        處理特定交易品種和時間週期的波段資料（分批處理）
+        處理特定交易品種和時間週期的波段資料（整體處理模式）
         
         Args:
             symbol: 交易品種
             timeframe: 時間週期
             algorithm_name: 演算法名稱
-            batch_size: 每批處理的資料筆數
+            limit: 限制處理的資料筆數
             **algorithm_params: 演算法參數
         """
         try:
             # 參數正規化與預設
             symbol = (symbol or '').strip()
-            timeframe = (timeframe or '').strip()
+            orig_timeframe = (timeframe or '').strip()
+            timeframe = normalize_timeframe(orig_timeframe)
             algorithm_name = (algorithm_name or 'zigzag').strip().lower()
             algorithm_params = algorithm_params if isinstance(algorithm_params, dict) else {}
 
-            # timeframe 驗證
+            # timeframe 驗證（訊息回報原始輸入，便於排查）
             if timeframe not in TIMEFRAMES:
-                msg = f"Unsupported timeframe: {timeframe}"
+                msg = f"Unsupported timeframe: {orig_timeframe}"
                 logger.error("input-error: %s", msg)
                 raise ValueError(msg)
 
-            logger.info(f"開始處理 {symbol} {timeframe} 的波段資料，使用 {algorithm_name} 演算法，批次大小: {batch_size}")
+            logger.info(f"🚀 開始處理 {symbol} {timeframe} 的波段資料，使用 {algorithm_name} 演算法")
+            logger.info(f"📝 演算法參數: {algorithm_params}")
 
             # 取得與合併演算法參數（defaults 覆蓋為基底，使用者參數覆蓋 defaults）
             try:
@@ -69,18 +73,22 @@ class SwingProcessor:
             except Exception as _e:  # 極端情況防呆
                 default_params = {}
             algo_params = {**default_params, **(algorithm_params or {})}
+            logger.info(f"🔧 最終使用參數: {algo_params}")
 
-            # 獲取蠟燭圖資料
+            # 獲取蠟燭圖資料（使用正規化後 timeframe）
             with DuckDBConnection(self.db_path) as db:
+                logger.info(f"📊 開始獲取 {symbol} {timeframe} 的K線資料...")
                 candlestick_df = db.get_candlestick_data(symbol, timeframe, limit=limit)
 
                 if candlestick_df is None or getattr(candlestick_df, 'empty', True):
-                    msg = f"No data for symbol={symbol} timeframe={timeframe}"
+                    msg = f"No data for symbol={symbol} timeframe={orig_timeframe}"
                     logger.error("input-error: %s", msg)
                     raise ValueError(msg)
 
                 total_records = len(candlestick_df)
-                logger.info(f"獲取到 {total_records} 筆蠟燭圖資料")
+                logger.info(f"✅ 獲取到 {total_records} 筆蠟燭圖資料")
+                logger.info(f"📅 日期範圍: {candlestick_df.index[0]} ~ {candlestick_df.index[-1]}")
+                logger.info(f"💰 價格範圍: {candlestick_df['low'].min():.5f} ~ {candlestick_df['high'].max():.5f}")
 
                 # 執行演算法計算
                 algorithm = self.algorithms.get(algorithm_name)
@@ -89,38 +97,26 @@ class SwingProcessor:
                     logger.error("input-error: %s", msg)
                     raise ValueError(msg)
 
+                logger.info(f"🎯 使用演算法: {algorithm.name}")
+                
                 # 設定演算法參數
                 if algo_params:
+                    logger.info(f"🔧 設定演算法參數: {algo_params}")
                     algorithm.set_parameters(**algo_params)
                 
-                # 分批處理
-                all_swing_points = []
-                total_swing_points = 0
+                # � 始終使用整體處理模式以確保連續性
+                logger.info(f"🎯 使用整體處理模式 (資料量: {total_records})")
+                num_batches = 1
+                logger.info("🔍 開始執行演算法...")
+                result_df = algorithm.calculate(candlestick_df)
                 
-                # 計算需要多少批次
-                num_batches = (total_records + batch_size - 1) // batch_size
-                logger.info(f"將分 {num_batches} 批處理資料")
+                # 收集波段點  
+                all_swing_points = algorithm.get_swing_points(result_df)
+                total_swing_points = len(all_swing_points)
                 
-                for batch_num in range(num_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min((batch_num + 1) * batch_size, total_records)
-                    
-                    logger.info(f"處理批次 {batch_num + 1}/{num_batches}: 索引 {start_idx} 到 {end_idx}")
-                    
-                    # 獲取當前批次的資料
-                    batch_df = candlestick_df.iloc[start_idx:end_idx].copy()
-                    
-                    # 計算波段
-                    result_df = algorithm.calculate(batch_df)
-                    
-                    # 收集波段點
-                    batch_swing_points = algorithm.get_swing_points(result_df)
-                    all_swing_points.extend(batch_swing_points)
-                    total_swing_points += len(batch_swing_points)
-                    
-                    logger.info(f"批次 {batch_num + 1} 完成，找到 {len(batch_swing_points)} 個波段點")
+                logger.info(f"✅ 整體處理完成，找到 {total_swing_points} 個波段點")
                 
-                # 合併所有批次的結果並存儲到資料庫
+                # 合併所有資料並存儲到資料庫
                 if all_swing_points:
                     # 創建包含所有波段點的DataFrame
                     combined_df = self._create_combined_swing_df(candlestick_df, all_swing_points)
@@ -162,431 +158,348 @@ class SwingProcessor:
             logger.error(f"處理波段資料失敗: {e}")
             raise
     
-    def process_all_timeframes(self, symbol: str, algorithm_name: str = 'zigzag', 
-                             timeframes: Optional[List[str]] = None, batch_size: int = 10000, **algorithm_params):
+    def process_symbol_timeframe_by_date_range(self, symbol: str, timeframe: str, 
+                                           algorithm_name: str = 'zigzag', 
+                                           start_date: Optional[str] = None, 
+                                           end_date: Optional[str] = None,
+                                           **algorithm_params):
         """
-        處理所有時間週期的波段資料
+        根據日期範圍處理特定交易品種和時間週期的波段資料（整體處理模式）
         
         Args:
             symbol: 交易品種
+            timeframe: 時間週期
             algorithm_name: 演算法名稱
-            timeframes: 要處理的時間週期列表，如果為None則處理所有可用時間週期
+            start_date: 開始日期 (格式: 'YYYY-MM-DD')，如果為None則使用最早的數據
+            end_date: 結束日期 (格式: 'YYYY-MM-DD')，如果為None則使用最新的數據
             **algorithm_params: 演算法參數
         """
         try:
-            logger.info(f"開始處理 {symbol} 的所有時間週期波段資料")
-            
+            # 參數正規化與預設
+            symbol = (symbol or '').strip()
+            orig_timeframe = (timeframe or '').strip()
+            timeframe = normalize_timeframe(orig_timeframe)
+            algorithm_name = (algorithm_name or 'zigzag').strip().lower()
+            algorithm_params = algorithm_params if isinstance(algorithm_params, dict) else {}
+
+            # timeframe 驗證
+            if timeframe not in TIMEFRAMES:
+                msg = f"Unsupported timeframe: {orig_timeframe}"
+                logger.error("input-error: %s", msg)
+                raise ValueError(msg)
+
+            logger.info(f"開始處理 {symbol} {timeframe} 的波段資料，日期範圍: {start_date or '最早'} 到 {end_date or '最新'}")
+
+            # 取得與合併演算法參數
+            try:
+                default_params = get_algorithm_parameters(algorithm_name)
+                default_params = default_params if isinstance(default_params, dict) else {}
+            except Exception as _e:
+                default_params = {}
+            algo_params = {**default_params, **(algorithm_params or {})}
+            # 獲取蠟燭圖資料
             with DuckDBConnection(self.db_path) as db:
-                # 獲取可用的時間週期
-                if timeframes is None:
-                    available_timeframes = db.get_available_timeframes(symbol)
-                else:
-                    available_timeframes = [tf for tf in timeframes if tf in TIMEFRAMES]
+                candlestick_df = db.get_candlestick_data(symbol, timeframe, start_date=start_date, end_date=end_date)
+
+                if candlestick_df is None or getattr(candlestick_df, 'empty', True):
+                    msg = f"No data for symbol={symbol} timeframe={orig_timeframe} in date range {start_date} to {end_date}"
+                    logger.error("input-error: %s", msg)
+                    raise ValueError(msg)
+
+                total_records = len(candlestick_df)
+                logger.info(f"獲取到 {total_records} 筆蠟燭圖資料")
+
+                # 執行演算法計算
+                algorithm = self.algorithms.get(algorithm_name)
+                if not algorithm:
+                    msg = f"不支援的演算法: {algorithm_name}"
+                    logger.error("input-error: %s", msg)
+                    raise ValueError(msg)
+
+                # 設定演算法參數
+                if algo_params:
+                    algorithm.set_parameters(**algo_params)
                 
-                if not available_timeframes:
-                    logger.warning(f"沒有找到 {symbol} 的可用時間週期")
-                    return []
+                # � 始終使用整體處理模式以確保連續性
+                logger.info(f"🎯 使用整體處理模式 (資料量: {total_records})")
+                num_batches = 1
                 
-                results = []
+                # 計算波段
+                result_df = algorithm.calculate(candlestick_df)
                 
-                for timeframe in available_timeframes:
-                    try:
-                        result = self.process_symbol_timeframe(
-                            symbol, timeframe, algorithm_name, batch_size, **algorithm_params
-                        )
-                        if result:
-                            results.append(result)
-                    except Exception as e:
-                        logger.error(f"處理 {symbol} {timeframe} 失敗: {e}")
-                        continue
+                # 收集波段點
+                all_swing_points = algorithm.get_swing_points(result_df)
+                total_swing_points = len(all_swing_points)
                 
-                logger.info(f"完成處理 {symbol} 的波段資料，成功處理 {len(results)} 個時間週期")
-                return results
+                logger.info(f"🎯 整體處理完成，找到 {total_swing_points} 個波段點")
                 
-        except Exception as e:
-            logger.error(f"處理所有時間週期失敗: {e}")
-            raise
-    
-    def get_swing_data(self, symbol: str, timeframe: str, algorithm: str,
-                      start_date: Optional[str] = None, end_date: Optional[str] = None):
-        """
-        獲取波段資料
-        
-        Args:
-            symbol: 交易品種
-            timeframe: 時間週期
-            algorithm: 演算法名稱
-            start_date: 開始日期
-            end_date: 結束日期
-            
-        Returns:
-            波段資料DataFrame
-        """
-        try:
-            with DuckDBConnection(self.db_path) as db:
-                return db.get_swing_data(symbol, timeframe, algorithm, start_date, end_date)
-        except Exception as e:
-            logger.error(f"獲取波段資料失敗: {e}")
-            raise
-    
-    def get_available_algorithms(self, symbol: str, timeframe: str) -> List[str]:
-        """
-        獲取可用的演算法
-        
-        Args:
-            symbol: 交易品種
-            timeframe: 時間週期
-            
-        Returns:
-            可用演算法列表
-        """
-        try:
-            with DuckDBConnection(self.db_path) as db:
-                return db.get_available_algorithms(symbol, timeframe)
-        except Exception as e:
-            logger.error(f"獲取可用演算法失敗: {e}")
-            return []
-    
-    def get_swing_statistics(self, symbol: str, timeframe: str, algorithm: str):
-        """
-        獲取波段統計資訊
-        
-        Args:
-            symbol: 交易品種
-            timeframe: 時間週期
-            algorithm: 演算法名稱
-            
-        Returns:
-            統計資訊字典
-        """
-        try:
-            swing_df = self.get_swing_data(symbol, timeframe, algorithm)
-            
-            if swing_df.empty:
-                return {
-                    'total_swings': 0,
-                    'avg_swing_range': 0,
-                    'avg_swing_duration': 0,
-                    'max_swing_range': 0,
-                    'min_swing_range': 0
-                }
-            
-            # 計算統計資訊
-            swing_points = []
-            for idx, row in swing_df.iterrows():
-                zigzag_price = row['zigzag_price']
-                if zigzag_price is not None and not (isinstance(zigzag_price, float) and np.isnan(zigzag_price)):
-                    swing_points.append({
-                        'timestamp': idx,
-                        'price': zigzag_price,
-                        'type': row['zigzag_type'],
-                        'strength': row['zigzag_strength']
-                    })
-            
-            if len(swing_points) < 2:
-                return {
-                    'total_swings': 0,
-                    'avg_swing_range': 0,
-                    'avg_swing_duration': 0,
-                    'max_swing_range': 0,
-                    'min_swing_range': 0
-                }
-            
-            # 計算波段統計
-            swing_ranges = []
-            swing_durations = []
-            
-            for i in range(len(swing_points) - 1):
-                current = swing_points[i]
-                next_point = swing_points[i + 1]
-                
-                range_val = abs(next_point['price'] - current['price'])
-                
-                # 確保 timestamp 是 pandas.Timestamp 型別
-                current_timestamp = current['timestamp']
-                next_timestamp = next_point['timestamp']
-                
-                if isinstance(current_timestamp, (int, float)):
-                    current_timestamp = pd.to_datetime(current_timestamp, unit='s')
-                elif isinstance(current_timestamp, str):
-                    try:
-                        current_timestamp = pd.to_datetime(current_timestamp)
-                    except:
-                        current_timestamp = pd.to_datetime(float(current_timestamp), unit='s')
-                elif not isinstance(current_timestamp, pd.Timestamp):
-                    current_timestamp = pd.to_datetime(current_timestamp)
+                # 合併所有資料並存儲到資料庫
+                if all_swing_points:
+                    # 創建包含所有波段點的DataFrame
+                    combined_df = self._create_combined_swing_df(candlestick_df, all_swing_points)
                     
-                if isinstance(next_timestamp, (int, float)):
-                    next_timestamp = pd.to_datetime(next_timestamp, unit='s')
-                elif isinstance(next_timestamp, str):
-                    try:
-                        next_timestamp = pd.to_datetime(next_timestamp)
-                    except:
-                        next_timestamp = pd.to_datetime(float(next_timestamp), unit='s')
-                elif not isinstance(next_timestamp, pd.Timestamp):
-                    next_timestamp = pd.to_datetime(next_timestamp)
+                    # 獲取演算法參數
+                    algorithm_parameters = algorithm.get_parameters() or {}
+                    
+                    # 生成版本描述
+                    version_description = get_version_description()
+                    
+                    # 存儲到資料庫（支援版本控制）
+                    version_hash = db.insert_swing_data(
+                        combined_df, symbol, timeframe, algorithm_name, algorithm_parameters,
+                        version_name=None, description=version_description
+                    )
+                    # 插入統計資料
+                    stats = self._calculate_combined_statistics(all_swing_points)
+                    db.insert_algorithm_statistics(symbol, timeframe, algorithm_name, version_hash, stats)
                 
-                duration = (next_timestamp - current_timestamp).total_seconds() / 3600  # 小時
+                # 計算統計資訊
+                stats = self._calculate_combined_statistics(all_swing_points)
                 
-                swing_ranges.append(range_val)
-                swing_durations.append(duration)
-            
-            return {
-                'total_swings': len(swing_points) - 1,
-                'avg_swing_range': np.mean(swing_ranges),
-                'avg_swing_duration': np.mean(swing_durations),
-                'max_swing_range': np.max(swing_ranges),
-                'min_swing_range': np.min(swing_ranges),
-                'swing_ranges': swing_ranges,
-                'swing_durations': swing_durations
-            }
-            
+                logger.info(f"波段處理完成: {symbol} {timeframe} {algorithm_name}")
+                logger.info(f"總共找到 {total_swing_points} 個波段點")
+                logger.info(f"統計資訊: {stats}")
+                
+                return {
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'algorithm': algorithm_name,
+                    'date_range': f"{start_date or '最早'} 到 {end_date or '最新'}",
+                    'total_records': total_records,
+                    'swing_points': total_swing_points,
+                    'statistics': stats,
+                    'batches_processed': num_batches
+                }
+                
         except Exception as e:
-            logger.error(f"獲取波段統計失敗: {e}")
+            logger.error(f"處理波段資料失敗: {e}")
             raise
     
-    def _create_combined_swing_df(self, candlestick_df: pd.DataFrame, swing_points: List[Dict[str, Any]]) -> pd.DataFrame:
+    def process_all_timeframes_by_date_range(self, symbol: str, 
+                                         algorithm_name: str = 'zigzag', 
+                                         timeframes: Optional[List[str]] = None, 
+                                         start_date: Optional[str] = None, 
+                                         end_date: Optional[str] = None,
+                                         **algorithm_params):
         """
-        創建包含所有波段點的DataFrame
-        
+        針對多個時間週期，依日期範圍生成波段資料。
+
         Args:
-            candlestick_df: 原始蠟燭圖資料
-            swing_points: 波段點列表
-            
+            symbol: 交易品種
+            algorithm_name: 使用演算法（預設 zigzag）
+            timeframes: 要處理的時間週期清單，None 則使用設定檔中的全部 key 順序
+            start_date: 起始日期（YYYY-MM-DD）
+            end_date: 結束日期（YYYY-MM-DD）
+            **algorithm_params: 演算法參數覆寫
+
         Returns:
-            包含波段點的DataFrame
+            Dict 包含每個 timeframe 的處理結果
         """
-        # 複製原始資料
-        result_df = candlestick_df.copy()
+        tfs = list(timeframes) if timeframes else list(TIMEFRAMES.keys())
+        results: Dict[str, Any] = {}
+        for tf in tfs:
+            try:
+                res = self.process_symbol_timeframe_by_date_range(
+                    symbol=symbol,
+                    timeframe=tf,
+                    algorithm_name=algorithm_name,
+                    start_date=start_date,
+                    end_date=end_date,
+                    **algorithm_params,
+                )
+                results[tf] = {"ok": True, "result": res}
+            except Exception as e:
+                logger.exception("process timeframe failed: %s %s", symbol, tf)
+                results[tf] = {"ok": False, "error": str(e)}
+        return {
+            "symbol": symbol,
+            "algorithm": algorithm_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "timeframes": tfs,
+            "results": results,
+        }
 
-        # 修正：確保 index 唯一，避免 reindexing only valid with uniquely valued Index objects
-        if not result_df.index.is_unique:
-            result_df = result_df.loc[~result_df.index.duplicated(keep='first')].copy()
+    # -------------------------- internal helpers --------------------------
+    def _create_combined_swing_df(self, candles: pd.DataFrame, swing_points: List[Dict[str, Any]]) -> pd.DataFrame:
+        """將所有批次的 swing points 合併到同一個 K 線 DataFrame 上。
 
-        # 初始化ZigZag相關欄位
-        result_df['zigzag_price'] = np.nan
-        result_df['zigzag_type'] = None
-        result_df['zigzag_strength'] = np.nan
-        result_df['zigzag_swing'] = np.nan
-        result_df['swing_high'] = np.nan
-        result_df['swing_low'] = np.nan
-        result_df['swing_range'] = np.nan
-        result_df['swing_duration'] = np.nan
-        result_df['swing_direction'] = None
-        
-        # 填充波段點
-        for i, point in enumerate(swing_points):
-            timestamp = point['timestamp']
-            # 強制轉換 timestamp 為 pandas.Timestamp 型別
-            if isinstance(timestamp, (int, float)):
-                # 如果是數字，視為 unix timestamp
-                timestamp = pd.to_datetime(timestamp, unit='s')
-            elif isinstance(timestamp, str):
-                # 如果是字串，嘗試解析
-                try:
-                    timestamp = pd.to_datetime(timestamp)
-                except:
-                    # 如果解析失敗，嘗試作為 unix timestamp
-                    timestamp = pd.to_datetime(float(timestamp), unit='s')
-            elif not isinstance(timestamp, pd.Timestamp):
-                # 其他型別，強制轉換
-                timestamp = pd.to_datetime(timestamp)
-            # 找到最接近的時間戳
-            if timestamp in result_df.index:
-                result_df.loc[timestamp, 'zigzag_price'] = point['price']
-                result_df.loc[timestamp, 'zigzag_type'] = point['type']
-                result_df.loc[timestamp, 'zigzag_strength'] = point['strength']
-                result_df.loc[timestamp, 'zigzag_swing'] = i
-            else:
-                # 如果找不到完全匹配的時間戳，找到最接近的
-                try:
-                    closest_idx = result_df.index.get_indexer([timestamp], method='nearest')[0]
-                    if closest_idx >= 0:
-                        actual_timestamp = result_df.index[closest_idx]
-                        result_df.loc[actual_timestamp, 'zigzag_price'] = point['price']
-                        result_df.loc[actual_timestamp, 'zigzag_type'] = point['type']
-                        result_df.loc[actual_timestamp, 'zigzag_strength'] = point['strength']
-                        result_df.loc[actual_timestamp, 'zigzag_swing'] = i
-                except Exception:
-                    continue
-        
-        # 計算波段資訊
-        result_df = self._calculate_swing_info_from_points(result_df, swing_points)
-        
-        return result_df
-    
-    def _calculate_swing_info_from_points(self, df: pd.DataFrame, swing_points: List[Dict[str, Any]]) -> pd.DataFrame:
-        """從波段點計算波段資訊"""
-        if len(swing_points) < 2:
+        candles: 來源 K 線（index 為 timestamp，含 open/high/low/close/volume）
+        swing_points: 由演算法回傳的轉折點列表（含 timestamp/price/type/strength/...）
+        """
+        if candles is None or getattr(candles, 'empty', True):
+            return pd.DataFrame()
+
+        df = candles.copy()
+        # 確保時間排序
+        try:
+            df = df.sort_index()
+        except Exception:
+            pass
+
+        # 預先建立欄位
+        df['zigzag_price'] = np.nan
+        df['zigzag_type'] = None
+        df['zigzag_strength'] = np.nan
+        df['zigzag_swing'] = np.nan
+        df['swing_high'] = np.nan
+        df['swing_low'] = np.nan
+        df['swing_range'] = np.nan
+        df['swing_duration'] = np.nan
+        df['swing_direction'] = None
+
+        if not swing_points:
             return df
-        
-        # 計算波段資訊
-        for i in range(len(swing_points) - 1):
-            current_point = swing_points[i]
-            next_point = swing_points[i + 1]
-            
-            current_timestamp = current_point['timestamp']
-            next_timestamp = next_point['timestamp']
-            
-            # 強制轉換 timestamp 為 pandas.Timestamp 型別
-            if isinstance(current_timestamp, (int, float)):
-                current_timestamp = pd.to_datetime(current_timestamp, unit='s')
-            elif isinstance(current_timestamp, str):
+
+        # 依時間排序轉折點
+        def _ts_key(v: Any) -> float:
+            ts = v.get('timestamp') if isinstance(v, dict) else None
+            try:
+                # pandas Timestamp -> ns since epoch
+                if isinstance(ts, pd.Timestamp):
+                    return float(ts.value)
+                # datetime -> seconds since epoch
+                if hasattr(ts, 'timestamp'):
+                    return float(ts.timestamp())
+                # numeric
+                if isinstance(ts, (int, np.integer)):
+                    return float(int(ts))
+                if isinstance(ts, (float, np.floating)):
+                    return float(ts)
+            except Exception:
+                pass
+            return float('-inf')
+
+        pts = sorted([p for p in swing_points if isinstance(p, dict)], key=_ts_key)
+
+        # 填入 zigzag_* 於對應 timestamp 列
+        for i, p in enumerate(pts):
+            ts = p.get('timestamp')
+            if ts is None:
+                continue
+            if ts not in df.index:
+                # 若為整數或浮點索引（極少見），盡量轉為位置
                 try:
-                    current_timestamp = pd.to_datetime(current_timestamp)
-                except:
-                    current_timestamp = pd.to_datetime(float(current_timestamp), unit='s')
-            elif not isinstance(current_timestamp, pd.Timestamp):
-                current_timestamp = pd.to_datetime(current_timestamp)
-                
-            if isinstance(next_timestamp, (int, float)):
-                next_timestamp = pd.to_datetime(next_timestamp, unit='s')
-            elif isinstance(next_timestamp, str):
+                    df.loc[ts, 'zigzag_price'] = p.get('price')
+                    df.loc[ts, 'zigzag_type'] = p.get('type')
+                    df.loc[ts, 'zigzag_strength'] = p.get('strength')
+                    df.loc[ts, 'zigzag_swing'] = i
+                    continue
+                except Exception:
+                    # 找最近的 timestamp（保守做法：略過）
+                    continue
+            df.loc[ts, 'zigzag_price'] = p.get('price')
+            df.loc[ts, 'zigzag_type'] = p.get('type')
+            df.loc[ts, 'zigzag_strength'] = p.get('strength')
+            df.loc[ts, 'zigzag_swing'] = i
+
+        # 依相鄰轉折點填入 swing_* 區間資訊
+        for i in range(len(pts) - 1):
+            cur = pts[i]
+            nxt = pts[i + 1]
+            t1 = cur.get('timestamp')
+            t2 = nxt.get('timestamp')
+            p1 = cur.get('price')
+            p2 = nxt.get('price')
+            typ1 = cur.get('type')
+            if t1 is None or t2 is None or t1 not in df.index or t2 not in df.index:
+                continue
+            # 方向與高低界
+            if typ1 == 'low':
+                # 上升段
+                seg_dir = 'up'
+                hi = p2
+                lo = p1
+                rng = (p2 - p1) if (p1 is not None and p2 is not None) else np.nan
+            elif typ1 == 'high':
+                # 下降段
+                seg_dir = 'down'
+                hi = p1
+                lo = p2
+                rng = (p1 - p2) if (p1 is not None and p2 is not None) else np.nan
+            else:
+                seg_dir = None
+                hi = np.nan
+                lo = np.nan
+                rng = np.nan
+
+            # 區間賦值（包含端點）
+            try:
+                df.loc[t1:t2, 'swing_direction'] = seg_dir
+                df.loc[t1:t2, 'swing_high'] = hi
+                df.loc[t1:t2, 'swing_low'] = lo
+                df.loc[t1:t2, 'swing_range'] = rng
+                # duration 以 bar 數量估算
+                # 取得切片長度
                 try:
-                    next_timestamp = pd.to_datetime(next_timestamp)
-                except:
-                    next_timestamp = pd.to_datetime(float(next_timestamp), unit='s')
-            elif not isinstance(next_timestamp, pd.Timestamp):
-                next_timestamp = pd.to_datetime(next_timestamp)
-            
-            # 找到時間範圍內的所有索引
-            mask = (df.index >= current_timestamp) & (df.index <= next_timestamp)
-            
-            # 波段範圍
-            if current_point['type'] == 'low' and next_point['type'] == 'high':
-                # 上升波段
-                df.loc[mask, 'swing_direction'] = 'up'
-                df.loc[mask, 'swing_low'] = current_point['price']
-                df.loc[mask, 'swing_high'] = next_point['price']
-                df.loc[mask, 'swing_range'] = next_point['price'] - current_point['price']
-                
-            elif current_point['type'] == 'high' and next_point['type'] == 'low':
-                # 下降波段
-                df.loc[mask, 'swing_direction'] = 'down'
-                df.loc[mask, 'swing_high'] = current_point['price']
-                df.loc[mask, 'swing_low'] = next_point['price']
-                df.loc[mask, 'swing_range'] = current_point['price'] - next_point['price']
-            
-            # 波段持續時間
-            # 確保 timestamp 是 pandas.Timestamp 型別
-            if isinstance(current_timestamp, (int, float)):
-                current_timestamp = pd.to_datetime(current_timestamp, unit='s')
-            elif isinstance(current_timestamp, str):
-                current_timestamp = pd.to_datetime(current_timestamp)
-                
-            if isinstance(next_timestamp, (int, float)):
-                next_timestamp = pd.to_datetime(next_timestamp, unit='s')
-            elif isinstance(next_timestamp, str):
-                next_timestamp = pd.to_datetime(next_timestamp)
-            
-            duration = (next_timestamp - current_timestamp).total_seconds() / 3600  # 小時
-            df.loc[mask, 'swing_duration'] = duration
-        
+                    seg_len = len(df.loc[t1:t2])
+                except Exception:
+                    seg_len = np.nan
+                df.loc[t1:t2, 'swing_duration'] = seg_len
+            except Exception:
+                # 若區間賦值例外就略過該段（保守處理）
+                continue
+
         return df
-    
+
     def _calculate_combined_statistics(self, swing_points: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        計算合併後的統計資訊
-        
-        Args:
-            swing_points: 波段點列表
-            
-        Returns:
-            統計資訊字典
-        """
-        if len(swing_points) < 2:
+        """根據轉折點列表計算簡要統計。"""
+        n = len(swing_points or [])
+        if n < 2:
             return {
                 'total_swings': 0,
                 'avg_swing_range': 0,
                 'avg_swing_duration': 0,
                 'max_swing_range': 0,
-                'min_swing_range': 0
+                'min_swing_range': 0,
+                'swing_ranges': [],
+                'swing_durations': [],
             }
-        
-        # 計算波段統計
-        swing_ranges = []
-        swing_durations = []
-        
-        for i in range(len(swing_points) - 1):
-            current = swing_points[i]
-            next_point = swing_points[i + 1]
-            
-            range_val = abs(next_point['price'] - current['price'])
-            
-            # 確保 timestamp 是 pandas.Timestamp 型別
-            current_timestamp = current['timestamp']
-            next_timestamp = next_point['timestamp']
-            
-            # 強制轉換為 pandas.Timestamp
-            if isinstance(current_timestamp, (int, float)):
-                current_timestamp = pd.to_datetime(current_timestamp, unit='s')
-            elif isinstance(current_timestamp, str):
-                try:
-                    current_timestamp = pd.to_datetime(current_timestamp)
-                except:
-                    current_timestamp = pd.to_datetime(float(current_timestamp), unit='s')
-            elif not isinstance(current_timestamp, pd.Timestamp):
-                current_timestamp = pd.to_datetime(current_timestamp)
-                
-            if isinstance(next_timestamp, (int, float)):
-                next_timestamp = pd.to_datetime(next_timestamp, unit='s')
-            elif isinstance(next_timestamp, str):
-                try:
-                    next_timestamp = pd.to_datetime(next_timestamp)
-                except:
-                    next_timestamp = pd.to_datetime(float(next_timestamp), unit='s')
-            elif not isinstance(next_timestamp, pd.Timestamp):
-                next_timestamp = pd.to_datetime(next_timestamp)
-            
-            duration = (next_timestamp - current_timestamp).total_seconds() / 3600  # 小時
-            
-            swing_ranges.append(range_val)
-            swing_durations.append(duration)
-        
+
+        # 依時間排序
+        def _norm_key(p: Dict[str, Any]) -> float:
+            ts = p.get('timestamp')
+            try:
+                if isinstance(ts, pd.Timestamp):
+                    return float(ts.value)
+                if hasattr(ts, 'timestamp'):
+                    return float(ts.timestamp())
+                if isinstance(ts, (int, np.integer)):
+                    return float(int(ts))
+                if isinstance(ts, (float, np.floating)):
+                    return float(ts)
+            except Exception:
+                pass
+            return float('-inf')
+        pts = sorted([p for p in swing_points if isinstance(p, dict) and p.get('timestamp') is not None], key=_norm_key)
+        ranges: List[float] = []
+        durations: List[float] = []
+        for i in range(len(pts) - 1):
+            a = pts[i]
+            b = pts[i + 1]
+            pa = a.get('price')
+            pb = b.get('price')
+            ta = a.get('timestamp')
+            tb = b.get('timestamp')
+            try:
+                rng = float(abs(pb - pa)) if pa is not None and pb is not None else 0.0
+            except Exception:
+                rng = 0.0
+            try:
+                dur = (tb - ta).total_seconds() / 3600.0  # 以小時
+            except Exception:
+                dur = 0.0
+            ranges.append(rng)
+            durations.append(dur)
+
         return {
-            'total_swings': len(swing_points) - 1,
-            'avg_swing_range': np.mean(swing_ranges),
-            'avg_swing_duration': np.mean(swing_durations),
-            'max_swing_range': np.max(swing_ranges),
-            'min_swing_range': np.min(swing_ranges),
-            'swing_ranges': swing_ranges,
-            'swing_durations': swing_durations
+            'total_swings': max(0, len(pts) - 1),
+            'avg_swing_range': float(np.mean(ranges)) if ranges else 0.0,
+            'avg_swing_duration': float(np.mean(durations)) if durations else 0.0,
+            'max_swing_range': float(np.max(ranges)) if ranges else 0.0,
+            'min_swing_range': float(np.min(ranges)) if ranges else 0.0,
+            'swing_ranges': ranges,
+            'swing_durations': durations,
         }
 
-
-def main():
-    """主函數 - 用於測試和批量處理"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='波段資料處理器')
-    parser.add_argument('--symbol', type=str, default='EXUSA30IDXUSD', help='交易品種')
-    parser.add_argument('--timeframe', type=str, help='時間週期 (可選，不指定則處理所有時間週期)')
-    parser.add_argument('--algorithm', type=str, default='zigzag', help='演算法名稱')
-    parser.add_argument('--deviation', type=float, default=5.0, help='ZigZag最小變動百分比')
-    parser.add_argument('--depth', type=int, default=12, help='ZigZag回溯深度')
-    parser.add_argument('--batch-size', type=int, default=10000, help='每批處理的資料筆數')
-    
-    args = parser.parse_args()
-    
-    processor = SwingProcessor()
-    
-    if args.timeframe:
-        # 處理單一時間週期
-        result = processor.process_symbol_timeframe(
-            args.symbol, args.timeframe, args.algorithm,
-            batch_size=args.batch_size,
-            deviation=args.deviation, depth=args.depth
-        )
-        print(f"處理結果: {result}")
-    else:
-        # 處理所有時間週期
-        results = processor.process_all_timeframes(
-            args.symbol, args.algorithm,
-            batch_size=args.batch_size,
-            deviation=args.deviation, depth=args.depth
-        )
-        print(f"處理結果: {results}")
-
-
-if __name__ == "__main__":
-    main() 
+    # ===== 已移除所有分批處理邏輯，只保留整體處理模式 =====

@@ -296,6 +296,28 @@ html, body {
     box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
+/* 生成按鈕特殊樣式 */
+.tool-btn.generate-btn {
+    width: auto;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    border-color: #68d391;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.tool-btn.generate-btn:hover {
+    background: linear-gradient(135deg, #68d391 0%, #48bb78 100%);
+    border-color: #9ae6b4;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+.tool-btn.generate-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(72, 187, 120, 0.4);
+}
+
 .separator {
     width: 1px;
     height: 24px;
@@ -356,6 +378,50 @@ html, body {
     color: #ffffff;
     box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
     transform: scale(1.05);
+}
+
+/* 日期範圍選擇器 */
+.date-range-selector {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(26, 32, 44, 0.8);
+    border-radius: 4px;
+    padding: 4px 6px;
+    border: 1px solid #4a5568;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.date-range-selector label {
+    color: #cbd5e0;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+    margin-right: 2px;
+}
+
+.date-input {
+    background: rgba(45, 55, 72, 0.8);
+    border: 1px solid #4a5568;
+    border-radius: 3px;
+    padding: 3px 4px;
+    color: #ffffff;
+    font-size: 10px;
+    width: 90px;
+    transition: border-color 0.2s ease;
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: #4299e1;
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+    width: 10px;
+    height: 10px;
 }
 
 /* Market Swing 主題變量 */
@@ -867,5 +933,55 @@ html, body {
   border: 1px solid #333;
   border-radius: 8px;
   white-space: pre-wrap;
+}
+
+/* 通知樣式 */
+.notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100px);
+  background: rgba(26, 32, 44, 0.95);
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: 1px solid #4a5568;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.notification.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.notification-success {
+  border-color: #48bb78;
+  background: rgba(72, 187, 120, 0.1);
+  color: #68d391;
+}
+
+.notification-warning {
+  border-color: #ed8936;
+  background: rgba(237, 137, 54, 0.1);
+  color: #fbb747;
+}
+
+.notification-error {
+  border-color: #f56565;
+  background: rgba(245, 101, 101, 0.1);
+  color: #fc8181;
+}
+
+.notification-info {
+  border-color: #4299e1;
+  background: rgba(66, 153, 225, 0.1);
+  color: #63b3ed;
 }
     

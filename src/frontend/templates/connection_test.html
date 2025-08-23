@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>連接測試</title>
+    <style>
+        body { 
+            background: #1e1e1e; 
+            color: white; 
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .test-box {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 8px;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>基本連接測試</h1>
+    
+    <div class="test-box">
+        <h2>服務器狀態</h2>
+        <p class="success">✅ 如果你看到這個頁面，說明服務器連接正常</p>
+    </div>
+    
+    <div class="test-box">
+        <h2>JavaScript測試</h2>
+        <p id="js-status">⏳ 檢查中...</p>
+    </div>
+    
+    <div class="test-box">
+        <h2>LightweightCharts測試</h2>
+        <p id="chart-status">⏳ 載入中...</p>
+    </div>
+    
+    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script>
+        // JavaScript 基本功能測試
+        document.getElementById('js-status').innerHTML = '<span class="success">✅ JavaScript 運行正常</span>';
+        
+        // LightweightCharts 測試
+        setTimeout(() => {
+            if (typeof LightweightCharts !== 'undefined') {
+                document.getElementById('chart-status').innerHTML = '<span class="success">✅ LightweightCharts 載入成功</span>';
+                console.log('LightweightCharts version:', LightweightCharts.version);
+            } else {
+                document.getElementById('chart-status').innerHTML = '<span class="error">❌ LightweightCharts 載入失敗</span>';
+            }
+        }, 1000);
+        
+        console.log('基本連接測試頁面載入完成');
+    </script>
+</body>
+</html>

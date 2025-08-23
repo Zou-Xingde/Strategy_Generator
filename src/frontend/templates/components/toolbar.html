@@ -1,0 +1,139 @@
+<!-- 響應式工具欄 -->
+<header class="main-toolbar" role="banner">
+    <!-- 主要工具區 -->
+    <div class="toolbar-main">
+        <!-- 左側控制區 -->
+        <div class="toolbar-left">
+            <div class="control-cluster">
+                <!-- 品種選擇下拉選單 -->
+                <div class="control-group symbol-group">
+                    <div class="symbol-selector">
+                        <button class="symbol-btn" id="symbol-dropdown" aria-haspopup="true" aria-expanded="false" aria-label="選擇交易品種">
+                            <span id="current-symbol">XAUUSD</span>
+                            <span class="dropdown-arrow" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="symbol-dropdown" id="symbol-dropdown-menu" role="listbox" aria-label="交易品種選項">
+                            <div class="symbol-option" data-symbol="XAUUSD" role="option" tabindex="0">XAUUSD (黃金)</div>
+                            <div class="symbol-option" data-symbol="US30" role="option" tabindex="0">US30 (道瓊斯)</div>
+                            <div class="symbol-option" data-symbol="US100" role="option" tabindex="0">US100 (納斯達克)</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 演算法選擇 -->
+                <div class="control-group algorithm-group">
+                    <div class="algorithm-selector">
+                        <button class="algorithm-btn" id="algorithm-dropdown" aria-haspopup="true" aria-expanded="false" aria-label="選擇演算法">
+                            <span id="current-algorithm">ZigZag</span>
+                            <span class="dropdown-arrow" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="algorithm-dropdown" id="algorithm-dropdown-menu" role="listbox" aria-label="演算法選項">
+                            <div class="algorithm-option" data-algorithm="ZigZag" role="option" tabindex="0">ZigZag</div>
+                            <div class="algorithm-option" data-algorithm="Swing High/Low" role="option" tabindex="0">Swing High/Low</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 參數設置按鈕 -->
+                <div class="control-group params-group">
+                    <button class="tool-btn params-btn" id="swing-params" aria-label="參數設置">
+                        <span class="btn-icon" aria-hidden="true">⚙️</span>
+                        <span class="label">參數</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 中間時間框架區 - 可水平捲動 -->
+        <div class="toolbar-center">
+            <div class="timeframe-container" role="group" aria-label="時間框架選擇">
+                <div class="timeframe-buttons" role="tablist">
+                    <button class="tf-btn" data-timeframe="M1" role="tab" aria-label="1分鐘">M1</button>
+                    <button class="tf-btn" data-timeframe="M5" role="tab" aria-label="5分鐘">M5</button>
+                    <button class="tf-btn" data-timeframe="M15" role="tab" aria-label="15分鐘">M15</button>
+                    <button class="tf-btn" data-timeframe="M30" role="tab" aria-label="30分鐘">M30</button>
+                    <button class="tf-btn" data-timeframe="H1" role="tab" aria-label="1小時">H1</button>
+                    <button class="tf-btn" data-timeframe="H4" role="tab" aria-label="4小時">H4</button>
+                    <button class="tf-btn active" data-timeframe="D1" role="tab" aria-label="日線" aria-selected="true">D1</button>
+                    <button class="tf-btn" data-timeframe="W1" role="tab" aria-label="週線">W1</button>
+                    <button class="tf-btn" data-timeframe="MN" role="tab" aria-label="月線">MN</button>
+                </div>
+            </div>
+            <!-- 日期範圍選擇器 -->
+            <div class="control-group date-group">
+                <div class="date-range-selector" role="group" aria-label="日期範圍選擇">
+                    <div class="date-input-group">
+                        <label for="start-date">開始</label>
+                        <input type="date" id="start-date" class="date-input" aria-label="開始日期">
+                    </div>
+                    <div class="date-input-group">
+                        <label for="end-date">結束</label>
+                        <input type="date" id="end-date" class="date-input" aria-label="結束日期">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右側工具區 -->
+        <div class="toolbar-right">
+            
+            <!-- 主要操作按鈕 -->
+            <div class="control-group action-group primary-actions">
+                <button class="action-btn primary-btn" id="generate-swing" aria-label="生成波段數據">
+                    <span class="btn-icon" aria-hidden="true">🚀</span>
+                    <span class="label">生成波段</span>
+                </button>
+                <button class="action-btn secondary-btn" id="clear-swing" aria-label="清除波段數據">
+                    <span class="btn-icon" aria-hidden="true">🗑️</span>
+                    <span class="label">清除</span>
+                </button>
+            </div>
+            
+            <div class="control-cluster">
+                <!-- 必要工具按鈕 -->
+                <div class="control-group tool-group essential-tools">
+                    <button class="tool-btn" id="show-swing" aria-label="顯示波段">
+                        <span class="btn-icon" aria-hidden="true">📈</span>
+                        <span class="label">顯示</span>
+                    </button>
+                    <button class="tool-btn" id="swing-list" aria-label="波段列表">
+                        <span class="btn-icon" aria-hidden="true">📋</span>
+                        <span class="label">列表</span>
+                    </button>
+                </div>
+                
+                <!-- 縮放工具組 -->
+                <div class="control-group tool-group zoom-tools">
+                    <button class="tool-btn" id="zoom-in" aria-label="放大圖表">
+                        <span class="btn-icon" aria-hidden="true">+</span>
+                        <span class="label">放大</span>
+                    </button>
+                    <button class="tool-btn" id="zoom-out" aria-label="縮小圖表">
+                        <span class="btn-icon" aria-hidden="true">-</span>
+                        <span class="label">縮小</span>
+                    </button>
+                    <button class="tool-btn" id="zoom-reset" aria-label="重置縮放">
+                        <span class="btn-icon" aria-hidden="true">🔄</span>
+                        <span class="label">重置</span>
+                    </button>
+                </div>
+                
+                <!-- 其他工具組 -->
+                <div class="control-group tool-group other-tools">
+                    <button class="tool-btn" id="crosshair" aria-label="十字線工具">
+                        <span class="btn-icon" aria-hidden="true">✚</span>
+                        <span class="label">十字線</span>
+                    </button>
+                    <button class="tool-btn" id="measure" aria-label="測量工具">
+                        <span class="btn-icon" aria-hidden="true">📏</span>
+                        <span class="label">測量</span>
+                    </button>
+                    <button class="tool-btn" id="fullscreen" aria-label="全螢幕模式">
+                        <span class="btn-icon" aria-hidden="true">⛶</span>
+                        <span class="label">全螢幕</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>

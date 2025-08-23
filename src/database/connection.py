@@ -3,6 +3,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, List, Dict
 import logging
+from src.utils.timeframe import normalize_timeframe
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO)
@@ -190,15 +191,17 @@ class DuckDBConnection:
         """取得蠟燭圖資料"""
         if not self.conn:
             raise RuntimeError("Database connection not established")
-            
+        tf = normalize_timeframe(timeframe)
+
         try:
+            has_window = bool(start_date or end_date)
             # 使用 v_candlestick_latest 視圖來獲取最新版本的資料
             query = """
                 SELECT timestamp, open, high, low, close, volume
                 FROM v_candlestick_latest
                 WHERE symbol = ? AND timeframe = ?
             """
-            params = [symbol, timeframe]
+            params = [symbol, tf]
             
             if start_date:
                 query += " AND timestamp >= ?"
@@ -210,11 +213,10 @@ class DuckDBConnection:
             
             query += " ORDER BY timestamp DESC"  # 改為 DESC 以獲取最新資料
             
-            # 添加 LIMIT 來限制返回資料量
+            # 僅在未指定日期視窗時套用預設 LIMIT，避免截斷視窗資料
             if limit:
                 query += f" LIMIT {limit}"
-            else:
-                # 預設限制為 1000 筆，避免載入過多資料
+            elif not has_window:
                 query += " LIMIT 1000"
             
             df = self.conn.execute(query, params).fetchdf()
@@ -230,12 +232,14 @@ class DuckDBConnection:
             logger.error(f"Failed to get candlestick data: {e}")
             # 如果視圖不存在，嘗試使用舊表
             try:
+                tf = normalize_timeframe(timeframe)
+                has_window = bool(start_date or end_date)
                 query = """
                     SELECT timestamp, open, high, low, close, volume
                     FROM candlestick_data
                     WHERE symbol = ? AND timeframe = ?
                 """
-                params = [symbol, timeframe]
+                params = [symbol, tf]
                 
                 if start_date:
                     query += " AND timestamp >= ?"
@@ -247,10 +251,10 @@ class DuckDBConnection:
                 
                 query += " ORDER BY timestamp DESC"  # 改為 DESC
                 
-                # 添加 LIMIT
+                # 添加 LIMIT（只有未指定日期視窗時採用預設限制）
                 if limit:
                     query += f" LIMIT {limit}"
-                else:
+                elif not has_window:
                     query += " LIMIT 1000"
                 
                 df = self.conn.execute(query, params).fetchdf()
@@ -319,6 +323,17 @@ class DuckDBConnection:
             
             # 重置索引，使timestamp成為一個欄位
             swing_df = swing_df.reset_index()
+            # 若 index 欄位名稱不是 'timestamp'，嘗試改名
+            if 'timestamp' not in swing_df.columns and 'index' in swing_df.columns:
+                swing_df = swing_df.rename(columns={'index': 'timestamp'})
+            # 確保 timestamp 欄位為 datetime 類型
+            if 'timestamp' in swing_df.columns:
+                try:
+                    swing_df['timestamp'] = pd.to_datetime(swing_df['timestamp'], errors='coerce')
+                except Exception:
+                    pass
+                # 移除無效的 timestamp
+                swing_df = swing_df[swing_df['timestamp'].notna()]
             
             # 添加必要欄位
             swing_df['symbol'] = symbol
@@ -346,6 +361,11 @@ class DuckDBConnection:
                 WHERE symbol = ? AND timeframe = ? AND algorithm_name = ?
             """, [symbol, timeframe, algorithm_name])
             
+            # 先註冊資料框，避免 duckdb 名稱解析失敗
+            try:
+                self.conn.register('swing_df', swing_df)
+            except Exception:
+                pass
             # 插入新資料
             self.conn.execute("""
                 INSERT INTO swing_data 

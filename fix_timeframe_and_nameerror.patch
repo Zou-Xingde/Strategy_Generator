@@ -1,0 +1,122 @@
+﻿diff --git a/src/frontend/app.py b/src/frontend/app.py
+index 0000000..0000001 100644
+--- a/src/frontend/app.py
++++ b/src/frontend/app.py
+@@ -1,12 +1,13 @@
+ from fastapi import FastAPI, HTTPException
+ from typing import Optional
+ from config.settings import (
+     DUCKDB_PATH, TIMEFRAMES, FRONTEND_HOST, FRONTEND_PORT,
+     MEASUREMENT_COLORS, CANDLESTICK_COLORS
+ )
+-from src.database.connection import DuckDBConnection
++from src.database.connection import DuckDBConnection
++from src.utils.timeframe import normalize_timeframe
+ from src.frontend.services.candlestick import CandlestickData
+ 
+ app = FastAPI(title="市場波段規律分析系統", version="1.0.0")
+ 
+@@ -260,17 +261,23 @@
+ @app.get("/api/candlestick/{symbol}/{timeframe}")
+ async def get_candlestick_data(
+     symbol: str,
+     timeframe: str,
+     start_date: Optional[str] = None,
+     end_date: Optional[str] = None,
+     limit: Optional[int] = None
+ ):
+     """獲取蠟燭圖資料API"""
+-    # 原本直接驗證 timeframe，導致 '1h/4h/1d' 回 400
+-    if timeframe not in TIMEFRAMES:
+-        raise HTTPException(status_code=400, detail="不支援的時間週期")
+-    data = CandlestickData.get_data(symbol, timeframe, start_date, end_date, limit)
++    # 先正規化（接受 1h/4h/1d 與 H1/H4/D1）
++    orig_tf = timeframe
++    tf = normalize_timeframe(timeframe)
++    # 驗證正規化後的 timeframe
++    if tf not in TIMEFRAMES:
++        raise HTTPException(status_code=400, detail="不支援的時間週期")
++    # 查 DB 用正規化後的 tf
++    data = CandlestickData.get_data(symbol, tf, start_date, end_date, limit)
++    # 若資料為空，回 404（不回傳假資料）
++    if not data.get("data"):
++        raise HTTPException(status_code=404, detail=f"不支援或無資料（symbol={symbol}, timeframe={orig_tf}）")
+     if "error" in data:
+         raise HTTPException(status_code=500, detail=data["error"])
+     return data
+ 
+diff --git a/src/data_processing/swing_processor.py b/src/data_processing/swing_processor.py
+index 0000000..0000001 100644
+--- a/src/data_processing/swing_processor.py
++++ b/src/data_processing/swing_processor.py
+@@ -16,10 +16,11 @@
+ from typing import Optional, List, Dict
+ from config.settings import DUCKDB_PATH, TIMEFRAMES
+ from config.version_control import get_algorithm_parameters, get_version_description
+-from src.database.connection import DuckDBConnection
++from src.database.connection import DuckDBConnection
++from src.utils.timeframe import normalize_timeframe
+ from src.algorithms.zigzag import ZigZagAlgorithm
+ 
+@@ -45,18 +46,22 @@
+     def process_symbol_timeframe(self, symbol: str, timeframe: str,
+                                  algorithm_name: str = 'zigzag', batch_size: int = 10000, limit: Optional[int] = None, **algorithm_params):
+         try:
+-            # 參數正規化與預設
+-            symbol = (symbol or '').strip()
+-            timeframe = (timeframe or '').strip()
++            # 參數正規化與預設
++            symbol = (symbol or '').strip()
++            orig_timeframe = (timeframe or '').strip()
++            # 先把 1h/4h/1d 等別名轉成設定檔鍵 (H1/H4/D1)
++            tf = normalize_timeframe(orig_timeframe)
+             algorithm_name = (algorithm_name or 'zigzag').strip().lower()
+             algorithm_params = algorithm_params if isinstance(algorithm_params, dict) else {}
+ 
+-            # timeframe 驗證
+-            if timeframe not in TIMEFRAMES:
+-                msg = f"Unsupported timeframe: {timeframe}"
++            # timeframe 驗證（訊息顯示原始輸入，便於排查）
++            if tf not in TIMEFRAMES:
++                msg = f"Unsupported timeframe: {orig_timeframe}"
+                 logger.error("input-error: %s", msg)
+                 raise ValueError(msg)
+ 
+-            logger.info(f"開始處理 {symbol} {timeframe} 的波段資料，使用 {algorithm_name} 演算法，批次大小: {batch_size}")
++            logger.info(f"開始處理 {symbol} {tf} 的波段資料，使用 {algorithm_name} 演算法，批次大小: {batch_size}")
+ 
+             # 取得與合併演算法參數（defaults 作為基底，呼叫端覆蓋）
+             try:
+                 default_params = get_algorithm_parameters(algorithm_name) or {}
+             except Exception:
+                 default_params = {}
+             algo_params = {**default_params, **(algorithm_params or {})}
+ 
+             # 取得蠟燭圖資料（用正規化後的 tf）
+-            with DuckDBConnection(self.db_path) as db:
+-                candlestick_df = db.get_candlestick_data(symbol, timeframe, limit=limit)
+-                if candlestick_df is None or getattr(candlestick_df, 'empty', True):
+-                    msg = f"No data for symbol={symbol} timeframe={timeframe}"
++            with DuckDBConnection(self.db_path) as db:
++                candlestick_df = db.get_candlestick_data(symbol, tf, limit=limit)
++                if candlestick_df is None or getattr(candlestick_df, 'empty', True):
++                    msg = f"No data for symbol={symbol} timeframe={orig_timeframe}"
+                     logger.error("input-error: %s", msg)
+                     raise ValueError(msg)
+ 
+             total_records = len(candlestick_df)
+             logger.info(f"獲取到 {total_records} 筆蠟燭圖資料")
+ 
+             # 下面流程維持不變（演算法計算 / 寫入 DB / 版本描述）
+-            algorithm = self.algorithms.get(algorithm_name)
++            algorithm = self.algorithms.get(algorithm_name)
+             if not algorithm:
+                 msg = f"不支援的演算法: {algorithm_name}"
+                 logger.error("input-error: %s", msg)
+                 raise ValueError(msg)
+-            if algo_params:
+-                algorithm.set_parameters(**algo_params)
++            if algo_params:
++                algorithm.set_parameters(**algo_params)
+ 
+             # ...（其餘程式碼不變）

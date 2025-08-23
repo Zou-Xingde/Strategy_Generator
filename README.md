@@ -32,6 +32,18 @@
 - **虛擬化渲染**: 支持大量數據的高性能顯示
 - **智能緩存**: 優化數據加載和渲染性能
 
+## 🛠️ 快速啟動
+
+### 啟動指令
+```bash
+# 啟動前端服務
+python run.py --frontend
+```
+
+### 訪問地址
+- **主頁面**: http://127.0.0.1:8050
+- **波段分析頁面**: http://127.0.0.1:8050/swing
+
 ## 🛠️ 安裝和運行
 
 ### 環境要求
@@ -67,11 +79,12 @@ pip install -r requirements.txt
 
 5. **啟動應用**
 ```bash
-python start_frontend.py
+python run.py --frontend
 ```
 
 6. **訪問應用**
-打開瀏覽器訪問: http://127.0.0.1:8050
+- 主頁面: http://127.0.0.1:8050
+- 波段分析頁面: http://127.0.0.1:8050/swing
 
 ## 📁 專案結構
 
@@ -97,7 +110,7 @@ market_swing_cursor/
 ├── database/                     # 數據庫文件
 ├── scripts/                      # 工具腳本
 ├── requirements.txt              # Python 依賴
-├── start_frontend.py            # 啟動腳本
+├── run.py                       # 主啟動腳本
 └── README.md                    # 專案說明
 ```
 
@@ -200,6 +213,15 @@ FRONTEND_PORT = 8050
 - 專案地址: https://github.com/Zou-Xingde/Strategy_Generator
 
 ## 🎉 更新日誌
+
+### v2.0.0 (2025-08-23)
+- ✅ 修復ZigZag算法長時間範圍處理問題
+- ✅ 實現動態deviation調整策略 (3% → 1.5% → 1.0%)
+- ✅ 移除批處理邏輯干擾，統一使用整體處理模式
+- ✅ 優化循環終止條件，確保完整數據覆蓋
+- ✅ 增強診斷和故障恢復機制
+- ✅ 修復WebSocket消息處理和彈出窗口功能
+- ✅ 完善前端UI交互體驗
 
 ### v1.0.0 (2025-01-15)
 - ✅ 修復波段數據顯示問題

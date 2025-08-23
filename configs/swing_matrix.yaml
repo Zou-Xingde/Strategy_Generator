@@ -1,19 +1,30 @@
+default:
+  algo: algorithms.zigzag_percent:ZigZagPercent
+  params: { deviation: 0.5, depth: 10 }
+  # Default window for all tasks (overridable per timeframe):
+  # You can use either explicit start/end or last_days.
+  window:
+    # start: '2023-01-01'
+    # end:   '2023-12-31'
+    last_days: 365
+
 XAUUSD:
   M5:
     algo: algorithms.zigzag_percent:ZigZagPercent
     params: { deviation: 0.3, depth: 10 }
+    window:
+      last_days: 30
 
   H1:
-    algo: algorithms.atr_breakout:ATRBreakout
-    params: { lookback: 14, atr_mult: 1.7 }
+    # Inherit default algo/params unless overridden
+    window:
+      start: '2023-06-01'
+      end:   '2023-12-31'
 
 BTCUSD:
   M15:
     algo: algorithms.zigzag_percent:ZigZagPercent
     params: { deviation: 0.8, depth: 12 }
-
-default:
-  algo: algorithms.zigzag_percent:ZigZagPercent
-  params: { deviation: 0.5, depth: 10 }
+    # No window here -> falls back to default.window
 
 

@@ -75,6 +75,8 @@ async def _run_task_and_stream(
     config_path: str = "",
     batch_size: int = 0,
     overlap: int = 0,
+    start_date: str = "",
+    end_date: str = "",
 ) -> None:
     root = _get_project_root()
 
@@ -109,6 +111,10 @@ async def _run_task_and_stream(
             args += ["--batch-size", str(batch_size)]
         if overlap:
             args += ["--overlap", str(overlap)]
+        if start_date:
+            args += ["--start", start_date]
+        if end_date:
+            args += ["--end", end_date]
         try:
             if params and isinstance(params, dict) and params.get("dry_run"):
                 args += ["--dry-run"]
@@ -268,6 +274,10 @@ async def swing_generate(payload: Dict[str, Any]):
     batch_size = int(payload.get("batch_size") or 0)
     overlap = int(payload.get("overlap") or 0)
     dry_run = bool(payload.get("dry_run") or False)
+    
+    # 提取日期參數
+    start_date = payload.get("start_date")
+    end_date = payload.get("end_date")
 
     # 1) 取得/產生 taskId（支援前端傳入）
     task_id = payload.get("taskId") or uuid.uuid4().hex
@@ -291,6 +301,8 @@ async def swing_generate(payload: Dict[str, Any]):
                 params=params,
                 batch_size=batch_size,
                 overlap=overlap,
+                start_date=start_date,
+                end_date=end_date,
                 # pass-through dry-run via params -> CLI --dry-run
             )
         )

@@ -13,6 +13,9 @@ import json
 from typing import Optional, List, Dict
 import uvicorn
 from pathlib import Path
+from starlette.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter
+from fastapi.responses import RedirectResponse
 
 # 添加專案根目錄到路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,9 +25,117 @@ from config.settings import (
     MEASUREMENT_COLORS, CANDLESTICK_COLORS
 )
 from src.database.connection import DuckDBConnection
+from src.utils.timeframe import normalize_timeframe
 
 # 創建FastAPI應用
 app = FastAPI(title="市場波段規律分析系統", version="1.0.0")
+
+# API路由
+read_api = APIRouter()
+
+@read_api.get("/api/candles")
+async def api_candles(symbol: str, timeframe: str, limit: Optional[int] = 500):
+    tf = normalize_timeframe(timeframe)
+    if tf not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="不支援的時間週期")
+    try:
+        with DuckDBConnection(str(DUCKDB_PATH)) as db:
+            df = db.get_candlestick_data(symbol, tf, limit=limit)
+            candles: List[Dict] = []
+            if not df.empty:
+                # If limit is very large (>= 999999), return all data; otherwise apply tail limit
+                if limit and limit >= 999999:
+                    use_df = df  # Use all data
+                else:
+                    use_df = df.tail(limit or 500)
+                
+                for ts, row in use_df.iterrows():
+                    ms = int(ts.timestamp() * 1000) if hasattr(ts, "timestamp") else None
+                    candles.append({
+                        "ts": ms,
+                        "open": float(row.get("open")),
+                        "high": float(row.get("high")),
+                        "low": float(row.get("low")),
+                        "close": float(row.get("close")),
+                        "volume": int(row.get("volume")) if pd.notna(row.get("volume")) else 0,
+                    })
+            return {"candles": candles}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@read_api.get("/api/swings")
+async def api_swings(
+    symbol: str,
+    timeframe: str,
+    algo: str = "zigzag",
+    limit: Optional[int] = 500,
+    order: str = "asc",
+):
+    tf = normalize_timeframe(timeframe)
+    if tf not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="不支援的時間週期")
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="order 必須為 asc 或 desc")
+    try:
+        with DuckDBConnection(str(DUCKDB_PATH)) as db:
+            # latest batch by created_at
+            q = f"""
+            WITH latest AS (
+                SELECT MAX(created_at) AS created_at
+                FROM swing_data
+                WHERE symbol = ? AND timeframe = ? AND algorithm_name = ?
+            )
+            SELECT timestamp, zigzag_price, created_at, version_hash
+            FROM swing_data
+            WHERE symbol = ? AND timeframe = ? AND algorithm_name = ?
+              AND created_at = (SELECT created_at FROM latest)
+            ORDER BY timestamp {('DESC' if order == 'desc' else 'ASC')}
+            """
+            params = [symbol, tf, algo, symbol, tf, algo]
+            df = db.conn.execute(q, params).fetchdf()
+            if df.empty:
+                return {"legs": []}
+
+            # gather pivots
+            pivots: List[Dict] = []
+            batch_created_at = None
+            version_hash = None
+            for _, row in df.iterrows():
+                price = row["zigzag_price"]
+                if pd.notna(price):
+                    ts = row["timestamp"]
+                    ms = int(ts.timestamp() * 1000) if hasattr(ts, "timestamp") else None
+                    pivots.append({"t": ms, "p": float(price)})
+                if batch_created_at is None and pd.notna(row.get("created_at")):
+                    cat = row["created_at"]
+                    batch_created_at = int(cat.timestamp() * 1000) if hasattr(cat, "timestamp") else None
+                if version_hash is None and row.get("version_hash") is not None:
+                    version_hash = str(row["version_hash"]) 
+
+            # build legs
+            legs: List[Dict] = []
+            for i in range(len(pivots) - 1):
+                legs.append({
+                    "t1": pivots[i]["t"],
+                    "p1": pivots[i]["p"],
+                    "t2": pivots[i + 1]["t"],
+                    "p2": pivots[i + 1]["p"],
+                })
+
+            # apply limit after order - if limit is very large, don't apply limit
+            if isinstance(limit, int) and limit > 0 and limit < 999999:
+                legs = legs[:limit] if order == "asc" else legs[:limit]
+
+            return {
+                "legs": legs,
+                "created_at": batch_created_at,
+                "version_hash": version_hash,
+                "order": order,
+                "count": len(legs),
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # CORS（同域下無害，跨域時可使用）
 app.add_middleware(
@@ -64,6 +175,30 @@ except Exception as e:
 
 # 在路由之後掛載靜態資源，避免覆蓋 API/WS
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+app.include_router(read_api)
+
+# 新的波段測試頁面 - 使用新的響應式模板架構
+@app.get("/swing/", include_in_schema=False)
+async def swing_page(request: Request):
+    """波段生成器頁面 - 使用新的響應式RWD模板"""
+    import time
+    cache_buster = int(time.time())  # 使用當前時間戳作為版本號
+    return templates.TemplateResponse("swing_new.html", {
+        "request": request,
+        "cache_buster": cache_buster
+    })
+
+# 添加測試頁面路由
+@app.get("/test/", include_in_schema=False)
+async def test_page(request: Request):
+    """測試頁面 - 基本圖表功能測試"""
+    return templates.TemplateResponse("test.html", {"request": request})
+
+# 連接測試頁面
+@app.get("/connection-test/", include_in_schema=False)
+async def connection_test_page(request: Request):
+    """連接測試頁面"""
+    return templates.TemplateResponse("connection_test.html", {"request": request})
 
 # 提供演算法清單檔案（保持舊前端請求路徑 /algorithms/index.json 可用，避免再掛一個 StaticFiles 在根目錄）
 @app.get("/algorithms/index.json", include_in_schema=False)
@@ -200,64 +335,10 @@ async def favicon() -> Response:
 
 
 
-# SPA fallback：非 API/非靜態/非 docs 的 404 回首頁
-@app.middleware("http")
-async def spa_fallback(request: Request, call_next):
-    path = request.url.path
-    if path.startswith("/swing") or path.startswith("/api") or path.startswith("/static") \
-       or path.startswith("/docs") or path.startswith("/openapi") \
-       or path.startswith("/redoc") or path.startswith("/healthz"):
-        return await call_next(request)
-
-    last = path.rsplit("/", 1)[-1]
-    if "." in last:
-        return await call_next(request)
-
-    resp = await call_next(request)
-    if resp.status_code == 404:
-        return FileResponse(str(templates_dir / "index.html"))
-    return resp
-
-@app.get("/healthz", include_in_schema=False)
-def healthz():
-    return {"ok": True}
+# Remove SPA fallback and healthz; keep only /, /swing/, /docs, and /api/*
 
 
-# Factory wrapper to add debug endpoints and return the same app instance
-def create_app() -> FastAPI:
-    @app.get("/__whoami", include_in_schema=False)
-    def whoami():
-        import os
-        return {"app_file": __file__, "cwd": os.getcwd()}
-
-    @app.get("/__routes", include_in_schema=False)
-    def list_routes():
-        return [r.path for r in app.router.routes]
-
-    @app.get("/__routes_full", include_in_schema=False)
-    def list_routes_full():
-        data = []
-        for r in app.router.routes:
-            try:
-                path = getattr(r, "path", None)
-                methods = sorted(list(getattr(r, "methods", set()))) if hasattr(r, "methods") else []
-                endpoint = getattr(r, "endpoint", None)
-                mod = getattr(endpoint, "__module__", None) if endpoint else None
-                name = getattr(endpoint, "__name__", None) if endpoint else None
-                data.append({
-                    "path": path,
-                    "methods": methods,
-                    "endpoint_module": mod,
-                    "endpoint_name": name,
-                })
-            except Exception:
-                pass
-        return data
-
-    return app
-
-# Re-export the app via factory (adds debug endpoints)
-app = create_app()
+# Remove debug endpoints and factory indirection
 
 @app.get("/api/candlestick/{symbol}/{timeframe}")
 async def get_candlestick_data(
@@ -269,10 +350,18 @@ async def get_candlestick_data(
 ):
     """獲取蠟燭圖資料API"""
     
-    if timeframe not in TIMEFRAMES:
+    # 先正規化（接受 1h/4h/1d 與 H1/H4/D1 等別名）
+    orig_tf = timeframe
+    tf = normalize_timeframe(timeframe)
+
+    # 驗證正規化後的 timeframe；錯誤訊息可使用原始輸入便於排查
+    if tf not in TIMEFRAMES:
         raise HTTPException(status_code=400, detail="不支援的時間週期")
     
-    data = CandlestickData.get_data(symbol, timeframe, start_date, end_date, limit)
+    data = CandlestickData.get_data(symbol, tf, start_date, end_date, limit)
+    # 若資料為空，回 404（不回傳假資料）
+    if not data.get("data"):
+        raise HTTPException(status_code=404, detail=f"不支援或無資料（symbol={symbol}, timeframe={orig_tf}）")
     
     if "error" in data:
         raise HTTPException(status_code=500, detail=data["error"])
@@ -369,20 +458,20 @@ async def get_swing_data(
                     limit = 15
             
             # 查詢波段資料
-            query = f"""
+            query = """
             SELECT id, symbol, timeframe, algorithm_name, version_hash,
                    timestamp, zigzag_price, zigzag_type, zigzag_strength,
                    zigzag_swing, swing_high, swing_low, swing_range,
                    swing_duration, swing_direction, created_at
             FROM swing_data 
-            WHERE symbol = '{symbol}' 
-              AND timeframe = '{timeframe}'
-              AND algorithm_name = '{algorithm}'
+            WHERE symbol = ? 
+              AND timeframe = ?
+              AND algorithm_name = ?
             ORDER BY timestamp DESC
-            LIMIT {limit}
+            LIMIT ?
             """
-            
-            df = db.conn.execute(query).fetchdf()
+            params = [symbol, timeframe, algorithm, limit]
+            df = db.conn.execute(query, params).fetchdf()
             
             if df.empty:
                 return {"data": [], "message": "暫無波段資料"}
@@ -431,8 +520,8 @@ async def get_swing_statistics(
     try:
         with DuckDBConnection(str(DUCKDB_PATH)) as db:
             # 查詢統計資訊
-            query = f"""
-            SELECT 
+            query = """
+            SELECT
                 COUNT(*) as total_swings,
                 AVG(zigzag_strength) as avg_strength,
                 MAX(zigzag_strength) as max_strength,
@@ -446,12 +535,12 @@ async def get_swing_statistics(
                 COUNT(CASE WHEN zigzag_type = 'high' THEN 1 END) as high_points,
                 COUNT(CASE WHEN zigzag_type = 'low' THEN 1 END) as low_points
             FROM swing_data 
-            WHERE symbol = '{symbol}' 
-              AND timeframe = '{timeframe}'
-              AND algorithm_name = '{algorithm}'
+            WHERE symbol = ? 
+              AND timeframe = ?
+              AND algorithm_name = ?
             """
-            
-            result = db.conn.execute(query).fetchone()
+            params = [symbol, timeframe, algorithm]
+            result = db.conn.execute(query, params).fetchone()
             
             if not result:
                 return {"message": "暫無統計資料"}

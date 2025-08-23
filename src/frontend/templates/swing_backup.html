@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Swing Generator - 波段生成器</title>
+    <link rel="stylesheet" href="/static/swing.css?v={{ cache_buster }}">
+    <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body class="market-swing-theme">
+    <!-- 響應式主容器 -->
+    <div class="app-container">
+        <!-- 頂部工具欄 -->
+        <header class="main-toolbar">
+            <!-- 左側控制區 -->
+            <div class="toolbar-left">
+                <!-- 品種選擇下拉選單 -->
+                <div class="control-group symbol-group">
+                    <div class="symbol-selector">
+                        <button class="symbol-btn" id="symbol-dropdown">
+                            <span id="current-symbol">XAUUSD</span>
+                            <span class="dropdown-arrow">▼</span>
+                        </button>
+                        <div class="symbol-dropdown" id="symbol-dropdown-menu">
+                            <div class="symbol-option" data-symbol="XAUUSD">XAUUSD (黃金)</div>
+                            <div class="symbol-option" data-symbol="US30">US30 (道瓊斯)</div>
+                            <div class="symbol-option" data-symbol="US100">US100 (納斯達克)</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 演算法選擇 -->
+                <div class="control-group algorithm-group">
+                    <div class="algorithm-selector">
+                        <button class="algorithm-btn" id="algorithm-dropdown">
+                            <span id="current-algorithm">ZigZag</span>
+                            <span class="dropdown-arrow">▼</span>
+                        </button>
+                        <div class="algorithm-dropdown" id="algorithm-dropdown-menu">
+                            <div class="algorithm-option" data-algorithm="ZigZag">ZigZag</div>
+                            <div class="algorithm-option" data-algorithm="Swing High/Low">Swing High/Low</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 參數設置按鈕 -->
+                <div class="control-group params-group">
+                    <button class="tool-btn params-btn" id="swing-params" title="參數設置">
+                        <span class="btn-icon">⚙️</span>
+                        <span class="btn-text">參數</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 中間時間框架區 -->
+            <div class="toolbar-center">
+                <div class="timeframe-container">
+                    <div class="timeframe-buttons">
+                        <button class="tf-btn" data-timeframe="M1">M1</button>
+                        <button class="tf-btn" data-timeframe="M5">M5</button>
+                        <button class="tf-btn" data-timeframe="M15">M15</button>
+                        <button class="tf-btn" data-timeframe="M30">M30</button>
+                        <button class="tf-btn" data-timeframe="H1">H1</button>
+                        <button class="tf-btn" data-timeframe="H4">H4</button>
+                        <button class="tf-btn active" data-timeframe="D1">D1</button>
+                        <button class="tf-btn" data-timeframe="W1">W1</button>
+                        <button class="tf-btn" data-timeframe="MN">MN</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右側工具區 -->
+            <div class="toolbar-right">
+                <!-- 日期範圍選擇器 -->
+                <div class="control-group date-group">
+                    <div class="date-range-selector">
+                        <div class="date-input-group">
+                            <label for="start-date">開始</label>
+                            <input type="date" id="start-date" class="date-input">
+                        </div>
+                        <div class="date-input-group">
+                            <label for="end-date">結束</label>
+                            <input type="date" id="end-date" class="date-input">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 操作按鈕組 -->
+                <div class="control-group action-group">
+                    <button class="action-btn primary-btn" id="generate-swing">
+                        <span class="btn-icon">🔄</span>
+                        <span class="btn-text">生成波段</span>
+                    </button>
+                    <button class="action-btn secondary-btn" id="clear-swing">
+                        <span class="btn-icon">🗑️</span>
+                        <span class="btn-text">清除</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 移動端漢堡選單 -->
+            <div class="mobile-menu-toggle">
+                <button class="hamburger-btn" id="mobile-menu-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+        </header>
+        
+        <!-- 主要內容區域 -->
+        <main class="main-content">
+            <!-- 圖表容器 -->
+            <div class="chart-section">
+                <div class="chart-container">
+                    <div id="chart" class="trading-chart"></div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- 底部狀態欄 -->
+        <footer class="status-bar">
+            <div class="status-left">
+                <span id="connection-status" class="status-indicator">🟢 已連接</span>
+            </div>
+            <div class="status-center">
+                <span id="current-time" class="current-time"></span>
+            </div>
+            <div class="status-right">
+                <span id="data-count">數據量: -</span>
+                <span class="separator">|</span>
+                <span id="generation-status">就緒</span>
+            </div>
+        </footer>
+    </div>
+                <button class="tool-btn" id="clear-dates" title="清除日期">🗑️</button>
+            </div>
+        </div>
+        
+        <div class="toolbar-section">
+            <!-- 演算法選擇下拉選單 -->
+            <div class="algorithm-selector">
+                <button class="algorithm-btn" id="algorithm-dropdown">
+                    <span id="current-algorithm">ZigZag</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="algorithm-dropdown" id="algorithm-dropdown-menu">
+                    <div class="algorithm-option" data-algorithm="zigzag">ZigZag 演算法</div>
+                    <div class="algorithm-option" data-algorithm="fractal">Fractal 演算法</div>
+                    <div class="algorithm-option" data-algorithm="pivot">Pivot 演算法</div>
+                </div>
+            </div>
+            
+            <div class="separator"></div>
+            
+            <button class="tool-btn" id="generate-swing" title="生成波段">🚀</button>
+            <button class="tool-btn" id="swing-params" title="參數設置">⚙️</button>
+            <button class="tool-btn" id="show-swing" title="顯示波段">📈</button>
+            <button class="tool-btn" id="clear-swing" title="清除波段">🗑️</button>
+            <button class="tool-btn" id="swing-list" title="波段列表">📋</button>
+
+            
+            <div class="separator"></div>
+            
+            <button class="tool-btn" id="zoom-in" title="放大">+</button>
+            <button class="tool-btn" id="zoom-out" title="縮小">-</button>
+            <button class="tool-btn" id="zoom-reset" title="重置縮放">🔄</button>
+            <div class="separator"></div>
+            <button class="tool-btn" id="crosshair" title="十字線">✚</button>
+            <button class="tool-btn" id="measure" title="測量工具">📏</button>
+            <div class="separator"></div>
+            <button class="tool-btn" id="fullscreen" title="全屏">⛶</button>
+        </div>
+    </div>
+
+    <!-- 生成狀態區域 -->
+    <div class="swing-status-area">
+        <div id="swing-progress" class="swing-progress" style="display: none;">
+            <div class="swing-progress-track">
+                <div id="swing-progress-fill" class="swing-progress-fill"></div>
+            </div>
+            <span id="swing-progress-text" class="swing-progress-text">0%</span>
+        </div>
+        <pre id="swing-log" class="swing-log" style="display: none;"></pre>
+    </div>
+
+    <!-- 主要內容區域 -->
+    <div class="main-content">
+        <!-- 圖表區域 -->
+        <div class="chart-area">
+            <!-- 圖表標題欄 -->
+            <div class="chart-header">
+                <span class="chart-title" id="chart-title">XAUUSD, D1</span>
+                <div class="chart-info">
+                    <span id="price-info">價格: -</span>
+                    <span class="separator">|</span>
+                    <span id="time-info">-</span>
+                </div>
+            </div>
+            
+            <!-- 主圖表容器 -->
+            <div class="main-chart-container">
+                <div id="main-chart"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 測量結果懸浮視窗 -->
+    <div id="measurement-popup" class="measurement-popup" style="display: none;">
+        <div class="measurement-header">
+            <span class="measurement-title">📏 測量結果</span>
+            <button class="measurement-close" onclick="closeMeasurementPopup()">×</button>
+        </div>
+        <div class="measurement-content">
+            <div class="measurement-item">
+                <span class="measurement-label">價格差:</span>
+                <span id="measurement-price-diff" class="measurement-value">0.00</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">變化率:</span>
+                <span id="measurement-change-percent" class="measurement-value">0.00%</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">時間差:</span>
+                <span id="measurement-time-diff" class="measurement-value">0小時</span>
+            </div>
+            <div class="measurement-item">
+                <span class="measurement-label">方向:</span>
+                <span id="measurement-direction" class="measurement-value">-</span>
+            </div>
+        </div>
+        <div class="measurement-actions">
+            <button class="measurement-btn measurement-btn-clear" onclick="clearMeasurementAndClose()">清除測量</button>
+            <button class="measurement-btn measurement-btn-keep" onclick="keepMeasurementAndClose()">保留測量</button>
+        </div>
+    </div>
+
+    <!-- 參數設置彈出視窗 -->
+    <div id="params-popup" class="params-popup" style="display: none;">
+        <div class="params-header">
+            <span class="params-title">⚙️ 參數設置</span>
+            <button class="params-close" onclick="closeParamsPopup()">×</button>
+        </div>
+        <div class="params-content">
+            <div id="params-form">
+                <!-- 參數將在這裡動態生成 -->
+            </div>
+        </div>
+        <div class="params-actions">
+            <button class="params-btn params-btn-cancel" onclick="closeParamsPopup()">取消</button>
+            <button class="params-btn params-btn-confirm" onclick="confirmParams()">確認</button>
+        </div>
+    </div>
+
+    <!-- 波段列表懸浮視窗 -->
+    <div id="swing-list-popup" class="swing-list-popup" style="display: none;">
+        <div class="swing-list-header">
+            <span class="swing-list-title">📋 波段列表</span>
+            <button class="swing-list-close" onclick="closeSwingListPopup()">×</button>
+        </div>
+        <div class="swing-list-content">
+            <div class="swing-list-table">
+                <div class="swing-list-row swing-list-header-row">
+                    <div class="swing-list-cell">開始時間</div>
+                    <div class="swing-list-cell">開始價格</div>
+                    <div class="swing-list-cell">結束時間</div>
+                    <div class="swing-list-cell">結束價格</div>
+                    <div class="swing-list-cell">價差</div>
+                    <div class="swing-list-cell">時差</div>
+                </div>
+                <div id="swing-list-body">
+                    <!-- 波段列表內容將在這裡動態生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部狀態欄 -->
+    <div class="status-bar">
+        <div class="status-left">
+            <span id="connection-status">已連接</span>
+            <span class="separator">|</span>
+            <span id="current-time">-</span>
+        </div>
+        <div class="status-right">
+            <span id="data-count">數據量: -</span>
+            <span class="separator">|</span>
+            <span id="generation-status">就緒</span>
+        </div>
+    </div>
+
+    <script src="/static/swing.js?v={{ cache_buster }}"></script>
+</body>
+</html>
